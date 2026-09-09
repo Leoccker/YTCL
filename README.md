@@ -1,0 +1,77 @@
+# YTMC — cliente nativo do YouTube Music
+
+Cliente de desktop para Linux e Windows que fala direto com a API interna do
+YouTube (InnerTube). Sem Chromium embutido: a UI é Svelte sobre o webview do
+sistema, o núcleo é Rust e o áudio passa pelo libmpv.
+
+> **Aviso.** Este projeto usa a API interna do YouTube, que não é pública nem
+> documentada. Isso é zona cinzenta em relação aos Termos de Serviço do Google,
+> e a API muda sem aviso. Uso pessoal; sem distribuição em lojas oficiais e sem
+> monetização.
+
+## Estado
+
+Fase 0 (fundação) concluída: workspace, IPC, protocolo `ytmart://`, config,
+overlay de diagnóstico. Ainda não busca nem toca nada — ver o plano em
+`docs/plano.md`.
+
+## Dependências do sistema
+
+### Fedora
+```sh
+sudo dnf install -y webkit2gtk4.1-devel openssl-devel \
+  libappindicator-gtk3-devel librsvg2-devel mpv-libs-devel \
+  gcc gcc-c++ make file dpkg
+```
+
+### Debian/Ubuntu
+```sh
+sudo apt install -y libwebkit2gtk-4.1-dev libssl-dev \
+  libayatana-appindicator3-dev librsvg2-dev libmpv-dev \
+  build-essential file
+```
+
+### Windows
+Visual Studio Build Tools (C++), WebView2 Runtime (já vem no Windows 11), e a
+`libmpv-2.dll` — que o bundler empacota como recurso.
+
+Além disso: [Rust](https://rustup.rs) e Node 20+.
+
+## Desenvolvimento
+
+```sh
+npm install
+npm run tauri dev
+```
+
+`F3` abre o overlay de performance: fps, pior frame do último segundo e RSS da
+árvore de processos (no Linux o WebKitGTK roda em processos separados, então
+somar a árvore é a única medida honesta).
+
+## Verificação
+
+```sh
+cargo test --workspace
+cargo clippy --all-targets -- -D warnings
+npm run check
+```
+
+## Arquitetura
+
+| Camada | Onde | Papel |
+|---|---|---|
+| UI | `src/` | Svelte 5 (runes) + Vite, sem framework de componentes |
+| Ponte | `src-tauri/` | comandos, eventos, protocolo `ytmart://`, janela de login |
+| Núcleo | `crates/ytm-core/` | InnerTube, resolução de stream, cache SQLite, auth |
+| Áudio | `crates/ytm-player/` | libmpv, fila, gapless |
+
+Três regras que sustentam a responsividade e não devem ser quebradas:
+
+1. **Capa nunca passa pelo IPC.** Vai pelo protocolo `ytmart://`, servida do
+   cache em disco, para o webview decodificar fora da thread principal.
+2. **Lista grande é paginada no comando**, não no frontend.
+3. **Posição da faixa é emitida a ~4 Hz**, com a barra interpolando em CSS.
+
+## Licença
+
+GPL-3.0-only.

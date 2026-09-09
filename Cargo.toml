@@ -1,0 +1,39 @@
+[workspace]
+members = ["src-tauri", "crates/ytm-core", "crates/ytm-player"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "GPL-3.0-only"
+repository = "https://github.com/leonardo/ytmc"
+
+[workspace.dependencies]
+ytm-core = { path = "crates/ytm-core" }
+ytm-player = { path = "crates/ytm-player" }
+
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+directories-next = "2"
+parking_lot = "0.12"
+
+# Perfil de dev: o codigo do app compila rapido, mas as dependencias
+# (webkit, sqlite, decodificadores) vao otimizadas para nao arrastar a UI.
+[profile.dev]
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
