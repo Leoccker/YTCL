@@ -5934,6 +5934,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
  "ytcl-core",
  "ytcl-player",
 ]

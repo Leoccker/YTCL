@@ -1,4 +1,5 @@
 mod commands;
+mod login_window;
 mod protocol;
 mod state;
 
@@ -34,6 +35,15 @@ pub fn run() {
         });
     }
 
+    // Re-hidrata a sessao da conta ativa em segundo plano: se o cookie ainda
+    // valer, a biblioteca ja aparece sem o usuario fazer nada.
+    {
+        let state = state.clone();
+        tauri::async_runtime::spawn(async move {
+            state.hydrate_session().await;
+        });
+    }
+
     let protocol_state = state.clone();
 
     tauri::Builder::default()
@@ -58,6 +68,17 @@ pub fn run() {
             commands::artist,
             commands::playlist,
             commands::playlist_tracks,
+            commands::auth_status,
+            commands::auth_login_google,
+            commands::auth_login_cookie,
+            commands::auth_switch,
+            commands::auth_reconnect,
+            commands::auth_logout,
+            commands::auth_rename,
+            commands::library_playlists,
+            commands::library_albums,
+            commands::library_artists,
+            commands::liked_songs,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o app");
