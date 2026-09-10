@@ -113,6 +113,17 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
 
 ---
 
+## Problemas conhecidos
+
+- **`music_saved_playlists` do rustypipe está quebrado.** A aba de Playlists da
+  biblioteca dá `missing field items` — o YouTube mudou o formato da resposta
+  do feed `FEmusic_liked_playlists` depois de abril de 2025 e o rustypipe
+  0.11.4 (última versão, e o HEAD do repositório dele também) não acompanhou.
+  As outras três rotas de biblioteca — álbuns, artistas, curtidas — funcionam
+  (`cargo run -p ytcl-core --example library` confirma). A UI isola o erro
+  nessa aba, com botão de repetir. Conserto: reimplementar a rota em
+  `innertube.rs` chamando o browse do InnerTube direto, ou esperar o upstream.
+
 ## Arquitetura
 
 ```
