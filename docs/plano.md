@@ -115,16 +115,38 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
 
 ## Problemas conhecidos
 
-- **rustypipe patchado por um fork.** O `rustypipe 0.11.4` falha ao ler o
-  `gridContinuation` vazio que o YouTube manda no fim do feed de playlists da
-  biblioteca (`FEmusic_liked_playlists`): o campo `items` vem ausente e o struct
-  `GridRenderer` o exige, gerando `missing field items`. O `[patch.crates-io]`
-  na raiz aponta para `codeberg.org/Leoccker/rustypipe`, que adiciona
-  `#[serde(default)]` a esse campo — uma linha, a mesma coisa que o campo
-  `continuations` logo abaixo já tem. Verificado: as quatro rotas de biblioteca
-  passam (`cargo run -p ytcl-core --example library`), teste de regressão em
+### rustypipe patchado por um fork
+
+O `rustypipe 0.11.4` falha ao ler o `gridContinuation` vazio que o YouTube manda
+no fim do feed de playlists da biblioteca (`FEmusic_liked_playlists`): o campo
+`items` vem ausente e o struct `GridRenderer` o exige, gerando `missing field
+items` ao paginar. O `[patch.crates-io]` na raiz do `Cargo.toml` aponta para
+`codeberg.org/Leoccker/rustypipe`, que adiciona `#[serde(default)]` a esse campo
+— uma linha, a mesma coisa que o campo `continuations` logo abaixo já tem.
+
+- **Fork:** `https://codeberg.org/Leoccker/rustypipe` (branch `main`), base
+  `v0.11.4` + um commit.
+- **PR upstream:** _(ainda não enviado — anotar a URL aqui quando for)_
+- **Verificado:** as quatro rotas de biblioteca passam
+  (`cargo run -p ytcl-core --example library`); regressão em
   `innertube_live.rs::library_playlists_pagina_ate_o_fim_sem_quebrar`.
-  **Remover o patch quando o upstream publicar a correção.**
+
+**Voltar para o rustypipe oficial** quando o upstream publicar a correção
+(checar em `https://codeberg.org/ThetaDev/rustypipe` — releases ou o campo
+`GridRenderer.items` no `src/client/response/music_item.rs`):
+
+1. Em `crates/ytcl-core/Cargo.toml`, subir `rustypipe` para a versão corrigida.
+2. Apagar o bloco `[patch.crates-io]` (e o comentário acima dele) do `Cargo.toml`
+   da raiz.
+3. `cargo update -p rustypipe`
+4. `cargo test -p ytcl-core --test innertube_live library_playlists_pagina -- --ignored`
+   (precisa de uma conta conectada no cofre do SO).
+5. Se passar: `cargo test --workspace` + `cargo clippy --workspace --all-targets`.
+6. Opcional: apagar o fork `Leoccker/rustypipe`.
+
+Se o upstream **não** aceitar a correção, o fork precisa ser rebaseado em cada
+release nova do rustypipe que a gente quiser (relevante na Fase 3, decifragem
+de assinatura).
 
 ## Arquitetura
 
