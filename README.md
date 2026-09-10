@@ -11,8 +11,25 @@ sistema, o núcleo é Rust e o áudio passa pelo libmpv.
 
 ## Estado
 
-Fase 0 (fundação) concluída: workspace, IPC, protocolo `ytmart://`, config e
-overlay de diagnóstico. Ainda não busca nem toca nada.
+| Fase | Estado |
+|---|---|
+| 0 — Fundação | concluída |
+| 1 — Metadados e busca | concluída |
+| 2 — Autenticação | pendente |
+| 3 — Reprodução | pendente |
+| 4 — UI completa | pendente |
+| 5 — Empacotamento | pendente |
+
+Hoje o app **busca** músicas, álbuns, artistas e playlists direto do YouTube
+Music, com cache em SQLite e lista virtualizada. Ainda **não reproduz** áudio
+(Fase 3) nem conecta a uma conta (Fase 2).
+
+Para exercitar o núcleo sem abrir a UI:
+
+```sh
+cargo run -p ytm-core --example search -- "radiohead"
+cargo run -p ytm-core --example search -- "caetano veloso" albums
+```
 
 O plano completo — arquitetura, fases, alvos de performance, riscos — está em
 **[`docs/plano.md`](docs/plano.md)**, com o estado de cada fase no topo.

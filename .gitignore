@@ -1,5 +1,29 @@
+# Build
 /target
-/node_modules
+/src-tauri/target
 /dist
+/node_modules
+
+# Cache local do rustypipe / SQLite, caso o app seja executado da raiz do repo
+/rustypipe_cache.json
+*.db
+*.db-wal
+*.db-shm
+
+# Segredos e config de ambiente
+.env
+.env.*
+!.env.example
+
+# Editores
+/.vscode
+/.idea
+*.swp
+*~
+
+# SO
 .DS_Store
+Thumbs.db
+
+# Logs
 *.log
