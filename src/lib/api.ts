@@ -21,6 +21,9 @@ export interface Config {
 }
 
 export interface MemInfo {
+  /** PSS: memória compartilhada dividida entre os processos. É o número real. */
+  pssMb: number | null;
+  /** RSS somado: infla, porque conta as libs compartilhadas uma vez por processo. */
   rssMb: number | null;
   processCount: number;
 }

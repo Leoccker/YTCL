@@ -60,7 +60,7 @@
 
   const fpsColor = $derived(fps >= 55 ? "ok" : fps >= 40 ? "warn" : "bad");
   const memColor = $derived(
-    !mem?.rssMb ? "dim" : mem.rssMb < 200 ? "ok" : mem.rssMb < 300 ? "warn" : "bad",
+    !mem?.pssMb ? "dim" : mem.pssMb < 200 ? "ok" : mem.pssMb < 300 ? "warn" : "bad",
   );
 </script>
 
@@ -75,10 +75,14 @@
       <span class={worstFrameMs > 16.7 ? "warn" : "ok"}>{worstFrameMs.toFixed(1)}ms</span>
     </div>
     <div class="row">
-      <span class="label">rss</span>
+      <span class="label">pss</span>
       <span class={memColor}>
-        {mem?.rssMb ? `${mem.rssMb.toFixed(0)}MB` : "—"}
+        {mem?.pssMb ? `${mem.pssMb.toFixed(0)}MB` : "—"}
       </span>
+    </div>
+    <div class="row">
+      <span class="label">rss</span>
+      <span class="dim">{mem?.rssMb ? `${mem.rssMb.toFixed(0)}MB` : "—"}</span>
     </div>
     <div class="row">
       <span class="label">procs</span>
