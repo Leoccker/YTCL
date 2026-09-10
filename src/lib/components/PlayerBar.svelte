@@ -45,7 +45,12 @@
   );
 </script>
 
-{#if !player.available}
+{#if player.error}
+  <div class="bar err">
+    <span>{player.error}</span>
+    <button onclick={() => (player.error = null)}>✕</button>
+  </div>
+{:else if !player.available}
   <div class="bar unavailable">
     <span>Reprodução indisponível — o libmpv não carregou.</span>
   </div>
@@ -120,6 +125,16 @@
     width: 100%;
     height: 100%;
     padding: 0 var(--space-4);
+  }
+  .bar.err {
+    display: flex;
+    justify-content: space-between;
+    color: #fca5a5;
+    background: var(--accent-dim);
+    font-size: 13px;
+  }
+  .bar.err button {
+    color: #fff;
   }
   .bar.idle,
   .bar.unavailable {

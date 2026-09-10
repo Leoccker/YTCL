@@ -6,6 +6,7 @@
 
 pub mod mpv;
 pub mod player;
+pub mod proxy;
 pub mod queue;
 pub mod state;
 
@@ -19,10 +20,18 @@ use async_trait::async_trait;
 /// O minimo que um backend de audio precisa saber fazer.
 #[async_trait]
 pub trait Backend: Send + Sync + 'static {
-    async fn load(&self, url: &str, gain_db: Option<f64>) -> anyhow::Result<()>;
+    async fn load(
+        &self,
+        stream: &ytcl_core::stream::ResolvedStream,
+        gain_db: Option<f64>,
+    ) -> anyhow::Result<()>;
     /// Enfileira a proxima faixa sem interromper a atual — e isso que
     /// produz o gapless de verdade.
-    async fn append(&self, url: &str, gain_db: Option<f64>) -> anyhow::Result<()>;
+    async fn append(
+        &self,
+        stream: &ytcl_core::stream::ResolvedStream,
+        gain_db: Option<f64>,
+    ) -> anyhow::Result<()>;
     async fn play(&self) -> anyhow::Result<()>;
     async fn pause(&self) -> anyhow::Result<()>;
     async fn seek(&self, secs: f64) -> anyhow::Result<()>;

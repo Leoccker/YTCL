@@ -8,6 +8,7 @@ use ytcl_core::auth::{Account, AuthStore, KeyringStore};
 use ytcl_core::cache::Cache;
 use ytcl_core::config::{Config, Paths};
 use ytcl_core::innertube::InnerTube;
+use ytcl_core::ytdlp::YtDlp;
 use ytcl_player::{MpvBackend, Player};
 
 /// Quantas capas baixamos ao mesmo tempo. Uma grade cheia pede dezenas de
@@ -91,7 +92,7 @@ impl AppState {
             Ok(backend) => {
                 let player = Player::new(
                     Arc::new(backend),
-                    self.innertube.clone(),
+                    Arc::new(YtDlp::default()),
                     backend_rx,
                     to_ui,
                 );

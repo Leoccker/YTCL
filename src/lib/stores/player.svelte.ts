@@ -112,7 +112,19 @@ class PlayerState {
     p.catch((e) => (this.error = errorMessage(e)));
   }
 
+  #lastPlayAt = 0;
+  #lastPlayId: string | null = null;
+
   play(tracks: Track[], start = 0) {
+    const id = tracks[start]?.id ?? null;
+    const now = performance.now();
+    // Ignora clique repetido na mesma faixa, e qualquer clique dentro de
+    // 700ms do anterior — senão uma sequência de cliques vira uma tempestade
+    // de resoluções e o YouTube passa a devolver 403.
+    if (id && id === this.#lastPlayId && now - this.#lastPlayAt < 4000) return;
+    if (now - this.#lastPlayAt < 700) return;
+    this.#lastPlayAt = now;
+    this.#lastPlayId = id;
     this.guard(playTracks(tracks, start));
   }
   toggle() {

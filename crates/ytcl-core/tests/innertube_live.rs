@@ -198,31 +198,31 @@ async fn library_playlists_pagina_ate_o_fim_sem_quebrar() {
     }
 }
 
-// --- resolução de stream ------------------------------------------------
-
 #[tokio::test]
-#[ignore = "precisa de rede"]
-async fn resolve_stream_devolve_url_de_audio_valida() {
+#[ignore = "precisa de yt-dlp + rede"]
+async fn ytdlp_resolve_stream_completo() {
     use ytcl_core::stream::{AudioCodec, StreamResolver};
+    use ytcl_core::ytdlp::YtDlp;
 
-    let it = client();
-    // "Never Gonna Give You Up" — público, sempre disponível.
-    let stream = it.resolve("dQw4w9WgXcQ").await.expect("resolver falhou");
+    let yt = YtDlp::default();
+    yt.check().await.expect("yt-dlp precisa estar no PATH");
 
-    assert!(stream.url.starts_with("https://"), "URL suspeita: {}", stream.url);
-    assert!(stream.bitrate > 0);
-    assert!(stream.duration_secs.unwrap_or(0) > 60);
+    let s = yt.resolve("lYBUbBu4W08").await.expect("resolve");
+    assert!(s.url.starts_with("https://"));
+    assert_eq!(s.codec, AudioCodec::Opus);
+    assert!(s.bitrate > 0);
+    assert!(s.size > 1_000_000, "size suspeito: {}", s.size);
+    assert!(s.duration_secs.unwrap_or(0) > 60);
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    assert!(
-        stream.is_fresh(now, 60),
-        "URL já vem expirada (expires_at={}, now={now})",
-        stream.expires_at
-    );
-
-    // Deve preferir Opus para uma faixa que tem as duas trilhas.
-    assert_eq!(stream.codec, AudioCodec::Opus, "esperava Opus, veio {:?}", stream.codec);
+    // O ponto de trocar de resolver: a URL não pode ser truncada. Um range
+    // perto do fim tem que responder 206.
+    let end = s.size - 1;
+    let start = end - 200_000;
+    let cli = reqwest::Client::new();
+    let mut req = cli.get(&s.url).header("Range", format!("bytes={start}-{end}"));
+    if let Some(ua) = &s.user_agent {
+        req = req.header("User-Agent", ua);
+    }
+    let st = req.send().await.expect("GET").status();
+    assert_eq!(st.as_u16(), 206, "stream truncado (range alto deu {st})");
 }

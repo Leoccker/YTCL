@@ -87,12 +87,14 @@ impl Player {
 
     /// Toca uma lista de faixas a partir de `start`.
     pub async fn play_tracks(&self, tracks: Vec<Track>, start: usize) -> anyhow::Result<()> {
+        tracing::info!("play_tracks: {} faixas, start={start}", tracks.len());
         {
             let mut inner = self.inner.lock();
             inner.queue.set(tracks, start);
             inner.prefetched = None;
         }
-        self.backend.stop().await.ok();
+        // `loadfile replace` no load_current já substitui o que estava tocando;
+        // um `stop` antes só criava uma janela de corrida.
         self.load_current(true).await
     }
 
@@ -231,9 +233,14 @@ impl Player {
         self.set_state(PlaybackState::Buffering);
         self.emit(PlayerEvent::TrackChanged { track: Box::new(track.clone()) });
 
+        tracing::info!("resolvendo stream de {}", track.id);
         let stream = match self.resolver.resolve(&track.id).await {
-            Ok(s) => s,
+            Ok(s) => {
+                tracing::info!("stream ok: {:?} {}kbps, expira em {}", s.codec, s.bitrate / 1000, s.expires_at);
+                s
+            }
             Err(e) => {
+                tracing::error!("resolve falhou: {e}");
                 self.emit(PlayerEvent::Error { message: format!("não consegui tocar: {e}") });
                 self.set_state(PlaybackState::Idle);
                 return Ok(());
@@ -241,7 +248,7 @@ impl Player {
         };
 
         let gain = self.gain_for(&stream);
-        self.backend.load(&stream.url, gain).await?;
+        self.backend.load(&stream, gain).await?;
         if autoplay {
             self.backend.play().await?;
         }
@@ -254,6 +261,7 @@ impl Player {
         mut rx: mpsc::UnboundedReceiver<BackendEvent>,
     ) {
         while let Some(ev) = rx.recv().await {
+            tracing::debug!("backend event: {ev:?}");
             match ev {
                 BackendEvent::Playing => self.set_state(PlaybackState::Playing),
                 BackendEvent::Paused => self.set_state(PlaybackState::Paused),
@@ -300,7 +308,7 @@ impl Player {
         match self.resolver.resolve(&next).await {
             Ok(stream) => {
                 let gain = self.gain_for(&stream);
-                if self.backend.append(&stream.url, gain).await.is_ok() {
+                if self.backend.append(&stream, gain).await.is_ok() {
                     self.inner.lock().prefetched = Some((next, stream));
                 }
             }
@@ -357,7 +365,7 @@ impl Player {
         match self.resolver.resolve(&track.id).await {
             Ok(stream) => {
                 let gain = self.gain_for(&stream);
-                if self.backend.load(&stream.url, gain).await.is_ok() {
+                if self.backend.load(&stream, gain).await.is_ok() {
                     let _ = self.backend.seek(pos).await;
                     let _ = self.backend.play().await;
                     self.inner.lock().current_stream = Some(stream);

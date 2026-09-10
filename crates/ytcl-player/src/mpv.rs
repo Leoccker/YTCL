@@ -14,7 +14,11 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use libmpv2::events::{Event, PropertyData};
+use libmpv2::protocol::Protocol;
 use libmpv2::{mpv_end_file_reason, Format, Mpv};
+use ytcl_core::stream::ResolvedStream;
+
+use crate::proxy::{self, ProxyEnv, StreamSpec};
 use tokio::sync::mpsc;
 
 use crate::Backend;
@@ -66,14 +70,57 @@ impl MpvBackend {
             // Gapless de verdade + pré-carrega a próxima da playlist do mpv.
             init.set_property("gapless-audio", "yes")?;
             init.set_property("prefetch-playlist", "yes")?;
+            // Nunca deixar o mpv chamar yt-dlp: já damos a URL pronta.
+            init.set_property("ytdl", "no")?;
+            // O ffmpeg do mpv, por padrão, faz a 1ª requisição sem Range e
+            // algumas URLs do YouTube devolvem 403 nesse caso. Forçar uma
+            // requisição com Range e reconexão resolve.
+            init.set_property(
+                "stream-lavf-o",
+                "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5,seekable=1",
+            )?;
             // Sem terminal, sem config do usuário interferindo.
             init.set_property("terminal", "no")?;
             init.set_property("config", "no")?;
+            // Log interno do mpv para diagnóstico (temporário).
+            if let Ok(dir) = std::env::var("YTCL_MPV_LOG") {
+                let _ = init.set_property("log-file", dir.as_str());
+                let _ = init.set_property("msg-level", "all=warn");
+            }
             Ok(())
         })
         .map_err(|e| anyhow::anyhow!("iniciando o mpv: {e}"))?;
 
         let mpv = Arc::new(mpv);
+
+        // Protocolo `ytclstream://`: serve o áudio via reqwest com Range em
+        // blocos (o ffmpeg do mpv usa Range aberto e o YouTube devolve 403).
+        // O `Protocol` empresta `&Mpv`; registramos e vazamos (fica ativo
+        // pela vida do mpv, custa ~48 bytes).
+        {
+            let env = ProxyEnv {
+                rt: tokio::runtime::Handle::current(),
+                http: reqwest::Client::builder()
+                    .build()
+                    .unwrap_or_default(),
+            };
+            let proto = unsafe {
+                Protocol::new(
+                    &mpv,
+                    "ytclstream".into(),
+                    env,
+                    proxy::open,
+                    proxy::close,
+                    proxy::read,
+                    Some(proxy::seek),
+                    Some(proxy::size),
+                )
+            };
+            proto
+                .register()
+                .map_err(|e| anyhow::anyhow!("registrando o protocolo do mpv: {e}"))?;
+            std::mem::forget(proto);
+        }
 
         let loop_mpv = mpv.clone();
         std::thread::Builder::new()
@@ -102,6 +149,15 @@ impl MpvBackend {
     }
 }
 
+fn spec_uri(stream: &ResolvedStream) -> String {
+    StreamSpec {
+        url: stream.url.clone(),
+        ua: stream.user_agent.clone().unwrap_or_default(),
+        size: stream.size,
+    }
+    .to_uri()
+}
+
 /// Traduz `anyhow::Result` de um comando do mpv que não deve derrubar nada.
 fn cmd(r: libmpv2::Result<()>, what: &str) -> anyhow::Result<()> {
     r.map_err(|e| anyhow::anyhow!("mpv {what}: {e}"))
@@ -109,19 +165,21 @@ fn cmd(r: libmpv2::Result<()>, what: &str) -> anyhow::Result<()> {
 
 #[async_trait]
 impl Backend for MpvBackend {
-    async fn load(&self, url: &str, gain_db: Option<f64>) -> anyhow::Result<()> {
+    async fn load(&self, stream: &ResolvedStream, gain_db: Option<f64>) -> anyhow::Result<()> {
         self.set_gain(gain_db);
-        cmd(self.mpv.command("loadfile", &[url, "replace"]), "loadfile replace")
+        let uri = spec_uri(stream);
+        tracing::info!("mpv loadfile replace: ytclstream:// (size={})", stream.size);
+        cmd(self.mpv.command("loadfile", &[&uri, "replace"]), "loadfile replace")
     }
 
-    async fn append(&self, url: &str, gain_db: Option<f64>) -> anyhow::Result<()> {
-        // O gain da próxima faixa é aplicado quando ela vira a atual (o mpv
-        // não tem `af` por item de playlist). Por ora, `append` só enfileira.
-        let _ = gain_db;
-        cmd(self.mpv.command("loadfile", &[url, "append"]), "loadfile append")
+    async fn append(&self, stream: &ResolvedStream, gain_db: Option<f64>) -> anyhow::Result<()> {
+        let _ = gain_db; // aplicado quando a faixa vira a atual
+        let uri = spec_uri(stream);
+        cmd(self.mpv.command("loadfile", &[&uri, "append"]), "loadfile append")
     }
 
     async fn play(&self) -> anyhow::Result<()> {
+        tracing::info!("mpv unpause");
         cmd(self.mpv.set_property("pause", false), "unpause")
     }
 

@@ -27,6 +27,12 @@ pub struct ResolvedStream {
     /// `loudnessDb` do proprio YouTube, para alimentar o ReplayGain do mpv.
     pub loudness_db: Option<f64>,
     pub duration_secs: Option<u32>,
+    /// User-Agent que o player HTTP precisa mandar. As URLs do cliente iOS
+    /// são travadas por UA.
+    pub user_agent: Option<String>,
+    /// Tamanho total em bytes, do `clen` do YouTube. O proxy precisa dele
+    /// para responder `size` ao mpv e limitar o último Range.
+    pub size: u64,
 }
 
 impl ResolvedStream {
@@ -45,6 +51,7 @@ pub struct AudioTrack {
     pub itag: u32,
     pub codec: AudioCodec,
     pub bitrate: u32,
+    pub size: u64,
     pub loudness_db: Option<f64>,
     /// Trilha com DRM não toca — o resolvedor descarta antes de chegar aqui,
     /// mas o campo existe para o teste cobrir o caso.
@@ -98,6 +105,8 @@ mod tests {
             expires_at,
             loudness_db: None,
             duration_secs: Some(200),
+            user_agent: None,
+            size: 4_000_000,
         }
     }
 
@@ -107,6 +116,7 @@ fn track(itag: u32, codec: AudioCodec, bitrate: u32, drm: bool) -> AudioTrack {
             itag,
             codec,
             bitrate,
+            size: 1_000_000,
             loudness_db: None,
             has_drm: drm,
         }
