@@ -66,6 +66,11 @@ e o overlay de diagnóstico (F3).
 stale-while-revalidate, o download de capas sob demanda e a tela de busca com
 lista virtualizada.
 
+**Fase 3** entregou a reprodução: resolução de stream via `yt-dlp`, backend
+libmpv com proxy `ytclstream://`, fila (shuffle determinístico, repeat),
+orquestrador `Player` (gapless por pré-resolução, recuperação de URL expirada) e
+a barra do player.
+
 **Fase 2** entregou o cofre de contas (`ytcl-core/src/auth.rs`, cookie no
 keyring do SO), a janela de login do Google (`src-tauri/src/login_window.rs`), a
 re-hidratação da sessão no boot, os comandos de biblioteca e a tela de
@@ -127,6 +132,31 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
 ---
 
 ## Problemas conhecidos
+
+### rustypipe não resolve stream — usamos yt-dlp
+
+A decifragem de assinatura do `rustypipe 0.11.4` quebrou contra o `base.js`
+atual do YouTube: **todos** os clientes que precisam dela
+(`Tv`/`Android`/`Desktop`/`DesktopMusic`) falham com `could not get deobf data`
+/ `could not extract sig fn name`. O único que dispensa a decifragem, `Ios`,
+devolve URLs **truncadas em ~800 KB** (403 em `Range` acima disso).
+
+Resolução de stream passou para o **`yt-dlp`** (`crates/ytcl-core/src/ytdlp.rs`),
+que é a implementação de referência e é atualizada toda semana. O rustypipe
+segue para busca, álbum, artista, playlist e biblioteca — isso funciona.
+
+- **Verificado:** `innertube_live.rs::ytdlp_resolve_stream_completo` (URL não
+  truncada), `playback_live.rs::seek_para_frente_nao_pula_a_faixa`.
+- **Custo:** ~1–2 s por faixa (startup do yt-dlp + rede). A pré-resolução da
+  próxima (~20 s antes do fim) esconde isso no gapless.
+- **`deno`:** o yt-dlp recente pede um runtime JS para alguns formatos; sem ele
+  cai nos clientes que dispensam JS, que hoje bastam para áudio. Se o YouTube
+  apertar, `deno` entra como dependência.
+
+**Voltar para Rust puro** exigiria: consertar a decifragem do rustypipe (trabalho
+grande, manutenção contínua — o risco central que o plano sempre citou), OU
+replicar em Rust a requisição do cliente `VISIONOS`/iOS do yt-dlp, que produz
+URL completa. Nenhum dos dois tem prazo; o yt-dlp fica.
 
 ### rustypipe patchado por um fork
 
@@ -354,13 +384,24 @@ packaging/                # ícones, .desktop, wrapper de lançamento no Linux
 1. Bundler do próprio Tauri: `.deb`, `.rpm` e AppImage no Linux; MSI e NSIS no Windows.
 2. **libmpv no Windows:** empacotar `libmpv-2.dll` (build do shinchiro) como recurso. **No Linux:**
    declarar dependência do `libmpv` do sistema em `.deb`/`.rpm`, e embutir a `.so` no AppImage.
-3. **Mitigação de gráficos no Linux** (`packaging/ytcl.sh`, usado no `.desktop`): detectar driver
+3. **`yt-dlp` embutido e auto-atualizável.** O app resolve stream via `yt-dlp`
+   (ver "Problemas conhecidos") e ele quebra se ficar velho — o YouTube muda toda
+   semana. Então:
+   - Empacotar o binário standalone do `yt-dlp` como recurso (Linux: `yt-dlp`
+     PyInstaller ~30 MB; Windows: `yt-dlp.exe`). Fica em
+     `<data_dir>/bin/yt-dlp` na primeira execução.
+   - `YtDlp::binary` procura, em ordem: `<data_dir>/bin/yt-dlp` → PATH do sistema.
+   - No boot, uma task em segundo plano roda `yt-dlp -U` (ou baixa a última
+     release do GitHub se o embutido não puder se auto-atualizar) no máximo uma
+     vez por dia. Falha de atualização não impede o uso da cópia atual.
+   - Config: `ytdlp_path` para o usuário apontar uma instalação própria.
+4. **Mitigação de gráficos no Linux** (`packaging/ytcl.sh`, usado no `.desktop`): detectar driver
    NVIDIA e, só nesse caso, exportar `__NV_DISABLE_EXPLICIT_SYNC=1` e, como último recurso,
    `WEBKIT_DISABLE_DMABUF_RENDERER=1`. Sem essa detecção, uma parte dos usuários NVIDIA abre o app
    e vê uma janela em branco. Em drivers NVIDIA ≥ 560 o workaround deve ser pulado, porque degrada
    a performance.
-4. `.desktop`, ícones e metainfo AppStream.
-5. CI no GitHub Actions: matriz `ubuntu-latest` + `windows-latest`, com `cargo clippy -- -D warnings`,
+5. `.desktop`, ícones e metainfo AppStream.
+6. CI no GitHub Actions: matriz `ubuntu-latest` + `windows-latest`, com `cargo clippy -- -D warnings`,
    `cargo test`, `svelte-check` e build dos pacotes nas tags.
 
 ---
