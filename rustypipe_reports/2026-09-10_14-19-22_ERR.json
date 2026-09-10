@@ -1,0 +1,30 @@
+{
+  "info": {
+    "package": "rustypipe",
+    "version": "0.11.4",
+    "date": "2026-09-10T14:19:22Z",
+    "language": "en",
+    "botguard_version": null
+  },
+  "level": "ERR",
+  "operation": "music_continuation(4qmFsgL0BRIXRkVtdXNpY19saWtlZF9wbGF5bGlzdHMa2AVDQTE2andSRFoyZEpRVkpCUTBkblNteGlhRXd0UVd0T2NGZFZiRUpWYTBaRFVqQkdSazVGUmxaUlZVcFVVVlZhVWxGV1pHNVJiVTVDVW1wU1FsZFZSa05SVm5CQ1VXdEdZVm93U2tKYVYyUkRVVlpzUWxFd1JscGFNRTVDVld0c1RGRXdSa3BYVlVaVVVWVktURm93YkVOUlYyaDJVVEJrUWxKdWJGUlJWemxFVmxSQ1ZsVXhSbTVpTURGRVZERm5NR0ZZVWxaU01GWlJXVzVTTmxOWVpFTlNWMlJDV1ZWV2NsWnVaR2hYUlRVeVYydGtWMlZyYkVoWGJscHFZVlZLVGxkV2FGTmlSMDV3VTFVeFJGUXhaekJoV0ZKV1VqQldVVmx1VWpaVFdHUkRVekprUW1WVlVrSmhiWGQwVTFoS1YxRnRhRVZOYW1ScVpWVXhRbGRGY0VsUk1tUkxWRlpTVTFOclNrUmFNV3hLVGxaQ1ZGWkliRUpXVms1RlVWZHNSbVI2V1hwVmEwcHZVa1ZHZUdOc1VtdFJWa3AyVkVaU1NHSklTbUZXTVVadVZrWm9WMlZ0UmxoVVYyeEZVVmRzUm1SNldYcFZhMHB2VWtWR2VHTnNVbXRSVms1MlVWVXhibVF3Ykc5VVZUa3dUVVpHV2xWWVpFeGpWRUY2VlZWYU5WTnJSblpSTVZWNFZGWk9TVm95T1VKU1YyUkNXVlZXYzFSdVdtdFdlbFp5V1ROc1EySlhUblJQV0ZKS1VtczFkbGxxVGt0TlIwNDFVMVZHVEZvd1JqVlJWV2gyVWxWV1FsSlhaRUpYVjJSRFVWWndRbEZyUm1GYU1FcENXVlZHUTFGWFRuWlJhMVp5VkcwMWFrMUhjM2RhUlZKS1RrZEtjMUpzY0ZaWFIzaE5XbGQwVDFOR2J6VmFNRXBDV2xWR1ExRldSWUlEQmlvRUNBQVFBUSUzRCUzRA%3D%3D)",
+  "error": "extraction error: invalid data from YT: missing field `items` at line 1 column 715",
+  "http_request": {
+    "url": "https://music.youtube.com/youtubei/v1/browse?prettyPrint=false",
+    "method": "POST",
+    "req_header": {
+      "authorization": "[redacted]",
+      "content-type": "application/json",
+      "origin": "https://music.youtube.com",
+      "referer": "https://music.youtube.com",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+      "x-goog-authuser": "0",
+      "x-goog-eom-visitor-id": "CgtUTDNyenhFNm1TUSjk-IrVBjIKCgJCUhIEGgAgXmLfAgrcAjIxLllUPUd3b08wYzlEbkFCbFlWbzVJWGRERDNUazh2bWRyVlFvUlV6WUJoSzBaZlRhOVhxWXBQdHdDaEpvUWNZZXVYeTlUMHBoVURLUUYyNjc4QVZiSmJjLWZEZ3p5a2c4ajVjdWlVRTlaN0NJZTRlbmdOb2k0cDFmUWV4NVQ3RWN2SmFSb3NKUHFGb1RQQnJxSUFRUVY0Qy1LbXRmYXpKMXhSME1zaDRMeWI1WjhjbEhyX0d4NXFXWWFvUGRYVFFDcVhDdkVpX2xFNHVXbzFSZGJOYVdMRmxtMGJnSGE1eUNaZzViOXRDZW4wYlhoUlVwRmNiaFJ1RllWQU5rN2FIdURDYWVVWGkwN2RaRHNPbHRjdGNyQWFtaml6d0hjUTJqSVhxVWl4M0JnbG1VNmRQOUU4bU1tRnpHZmx2WldvMmkwSVhzVFMtQW5XMExoa1Rsa09tMVdDTGt1QQ%3D%3D",
+      "x-youtube-client-name": "67",
+      "x-youtube-client-version": "1.20260908.14.00"
+    },
+    "req_body": "{\"context\":{\"client\":{\"clientName\":\"WEB_REMIX\",\"clientVersion\":\"1.20260908.14.00\",\"platform\":\"DESKTOP\",\"originalUrl\":\"https://music.youtube.com\",\"visitorData\":\"CgtUTDNyenhFNm1TUSjk-IrVBjIKCgJCUhIEGgAgXmLfAgrcAjIxLllUPUd3b08wYzlEbkFCbFlWbzVJWGRERDNUazh2bWRyVlFvUlV6WUJoSzBaZlRhOVhxWXBQdHdDaEpvUWNZZXVYeTlUMHBoVURLUUYyNjc4QVZiSmJjLWZEZ3p5a2c4ajVjdWlVRTlaN0NJZTRlbmdOb2k0cDFmUWV4NVQ3RWN2SmFSb3NKUHFGb1RQQnJxSUFRUVY0Qy1LbXRmYXpKMXhSME1zaDRMeWI1WjhjbEhyX0d4NXFXWWFvUGRYVFFDcVhDdkVpX2xFNHVXbzFSZGJOYVdMRmxtMGJnSGE1eUNaZzViOXRDZW4wYlhoUlVwRmNiaFJ1RllWQU5rN2FIdURDYWVVWGkwN2RaRHNPbHRjdGNyQWFtaml6d0hjUTJqSVhxVWl4M0JnbG1VNmRQOUU4bU1tRnpHZmx2WldvMmkwSVhzVFMtQW5XMExoa1Rsa09tMVdDTGt1QQ%3D%3D\",\"hl\":\"en\",\"gl\":\"US\",\"timeZone\":\"UTC\",\"utcOffsetMinutes\":0},\"request\":{\"internalExperimentFlags\":[],\"useSsl\":true},\"user\":{\"lockedSafetyMode\":false}},\"continuation\":\"4qmFsgL0BRIXRkVtdXNpY19saWtlZF9wbGF5bGlzdHMa2AVDQTE2andSRFoyZEpRVkpCUTBkblNteGlhRXd0UVd0T2NGZFZiRUpWYTBaRFVqQkdSazVGUmxaUlZVcFVVVlZhVWxGV1pHNVJiVTVDVW1wU1FsZFZSa05SVm5CQ1VXdEdZVm93U2tKYVYyUkRVVlpzUWxFd1JscGFNRTVDVld0c1RGRXdSa3BYVlVaVVVWVktURm93YkVOUlYyaDJVVEJrUWxKdWJGUlJWemxFVmxSQ1ZsVXhSbTVpTURGRVZERm5NR0ZZVWxaU01GWlJXVzVTTmxOWVpFTlNWMlJDV1ZWV2NsWnVaR2hYUlRVeVYydGtWMlZyYkVoWGJscHFZVlZLVGxkV2FGTmlSMDV3VTFVeFJGUXhaekJoV0ZKV1VqQldVVmx1VWpaVFdHUkRVekprUW1WVlVrSmhiWGQwVTFoS1YxRnRhRVZOYW1ScVpWVXhRbGRGY0VsUk1tUkxWRlpTVTFOclNrUmFNV3hLVGxaQ1ZGWkliRUpXVms1RlVWZHNSbVI2V1hwVmEwcHZVa1ZHZUdOc1VtdFJWa3AyVkVaU1NHSklTbUZXTVVadVZrWm9WMlZ0UmxoVVYyeEZVVmRzUm1SNldYcFZhMHB2VWtWR2VHTnNVbXRSVms1MlVWVXhibVF3Ykc5VVZUa3dUVVpHV2xWWVpFeGpWRUY2VlZWYU5WTnJSblpSTVZWNFZGWk9TVm95T1VKU1YyUkNXVlZXYzFSdVdtdFdlbFp5V1ROc1EySlhUblJQV0ZKS1VtczFkbGxxVGt0TlIwNDFVMVZHVEZvd1JqVlJWV2gyVWxWV1FsSlhaRUpYVjJSRFVWWndRbEZyUm1GYU1FcENXVlZHUTFGWFRuWlJhMVp5VkcwMWFrMUhjM2RhUlZKS1RrZEtjMUpzY0ZaWFIzaE5XbGQwVDFOR2J6VmFNRXBDV2xWR1ExRldSWUlEQmlvRUNBQVFBUSUzRCUzRA%3D%3D\"}",
+    "status": 200,
+    "resp_body": "{\"responseContext\":{\"serviceTrackingParams\":[{\"service\":\"GFEEDBACK\",\"params\":[{\"key\":\"browse_id\",\"value\":\"FEmusic_liked_playlists\"},{\"key\":\"browse_id_prefix\",\"value\":\"\"},{\"key\":\"logged_in\",\"value\":\"1\"}]},{\"service\":\"CSI\",\"params\":[{\"key\":\"c\",\"value\":\"WEB_REMIX\"},{\"key\":\"cver\",\"value\":\"1.20260908.14.00\"},{\"key\":\"yt_li\",\"value\":\"1\"},{\"key\":\"GetBrowsePlaylistsPage_rid\",\"value\":\"0x521acfacd1f9301f\"}]},{\"service\":\"ECATCHER\",\"params\":[{\"key\":\"client.version\",\"value\":\"1.20000101\"},{\"key\":\"client.name\",\"value\":\"WEB_REMIX\"}]}],\"responseId\":\"IhMI0bKAvJrklgMVD66VAh2pfQ6A\"},\"continuationContents\":{\"gridContinuation\":{\"trackingParams\":\"CAEQ6IsCIhMI0bKAvJrklgMVD66VAh2pfQ6A\",\"itemSize\":\"COLLECTION_STYLE_ITEM_SIZE_SMALL\"}},\"trackingParams\":\"CAAQhGciEwjRsoC8muSWAxUPrpUCHal9DoDKAQRLDiO4\"}"
+  }
+}
