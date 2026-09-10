@@ -5,9 +5,10 @@
 //! API interna do YouTube — que acontece algumas vezes por ano — tenha um
 //! lugar so para ser consertada.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
+use rustypipe::cache::CacheStorage;
 use rustypipe::client::{RustyPipe, RustyPipeQuery};
 use rustypipe::model::paginator::Paginator;
 use rustypipe::model::{
@@ -41,16 +42,42 @@ pub struct InnerTube {
 }
 
 impl InnerTube {
-    /// `storage_dir` guarda o cache do proprio rustypipe: versoes dos clientes
-    /// InnerTube e o JS de decifragem. Sem passar isso, o padrao dele e o
-    /// diretorio de trabalho atual — e o arquivo apareceria em qualquer lugar
-    /// de onde o app fosse lancado.
-    pub fn new(storage_dir: &Path) -> Result<Self> {
+    /// O cache do rustypipe (versoes dos clientes InnerTube, JS de decifragem)
+    /// fica em `<cache_dir>/rustypipe_cache.json`, atras de um storage que
+    /// remove os segredos antes de gravar — ver [`ScrubbedStorage`].
+    pub fn new(cache_dir: &Path) -> Result<Self> {
+        let storage = ScrubbedStorage::new(cache_dir.join("rustypipe_cache.json"));
         let rp = RustyPipe::builder()
-            .storage_dir(storage_dir)
+            .storage(Box::new(storage))
             .build()
             .map_err(|e| CoreError::Other(format!("iniciando o cliente InnerTube: {e}")))?;
         Ok(Self { rp })
+    }
+
+    /// Carrega o cookie de sessao de uma conta.
+    ///
+    /// Isto tambem **valida**: o rustypipe busca o youtube.com com o cookie
+    /// para extrair os cabecalhos de sessao, e falha se o cookie nao presta.
+    /// Um erro aqui vira `SessionExpired`, que a UI trata com o banner de
+    /// reconexao.
+    pub async fn set_cookie(&self, cookie: &str) -> Result<()> {
+        self.rp
+            .user_auth_set_cookie(cookie.to_string())
+            .await
+            .map_err(|e| match map_err(e) {
+                // Qualquer falha ao aplicar um cookie e, na pratica, "esse
+                // cookie nao serve" — seja expirado, incompleto ou rejeitado.
+                CoreError::SessionExpired | CoreError::Other(_) | CoreError::Parse(_) => {
+                    CoreError::SessionExpired
+                }
+                other => other,
+            })
+    }
+
+    /// Esquece o cookie em memoria. Nao mexe no cofre — quem chama decide se
+    /// tambem remove a conta.
+    pub async fn clear_cookie(&self) {
+        let _ = self.rp.user_auth_remove_cookie().await;
     }
 
     fn query(&self) -> RustyPipeQuery {
@@ -127,6 +154,66 @@ fn map_err(e: rustypipe::error::Error) -> CoreError {
                 CoreError::Other(s)
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cache do rustypipe sem os segredos
+// ---------------------------------------------------------------------------
+
+/// `CacheStorage` que persiste tudo que o rustypipe cacheia **menos** o
+/// cookie de sessao e o token OAuth.
+///
+/// Por que: o rustypipe grava `auth_cookie` e `oauth_token` no mesmo JSON das
+/// versoes de cliente e do JS de decifragem. Esses dois campos sao segredos e
+/// nao podem cair num arquivo em texto — eles vivem no cofre do SO (ver
+/// [`crate::auth`]). Os outros campos sao caros de refazer e nao tem nada de
+/// sensivel, entao continuam em disco.
+///
+/// Consequencia: a cada abertura o rustypipe comeca deslogado, e o app
+/// re-hidrata a sessao chamando [`InnerTube::set_cookie`] com o cookie do
+/// cofre.
+struct ScrubbedStorage {
+    path: PathBuf,
+}
+
+impl ScrubbedStorage {
+    fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl CacheStorage for ScrubbedStorage {
+    fn write(&self, data: &str) {
+        let scrubbed = match serde_json::from_str::<serde_json::Value>(data) {
+            Ok(mut v) => {
+                if let Some(obj) = v.as_object_mut() {
+                    obj.remove("auth_cookie");
+                    obj.remove("oauth_token");
+                }
+                serde_json::to_string(&v).unwrap_or_else(|_| data.to_string())
+            }
+            // Se nao for JSON valido, melhor gravar como veio do que perder o
+            // cache inteiro.
+            Err(_) => data.to_string(),
+        };
+
+        if let Some(dir) = self.path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(e) = std::fs::write(&self.path, &scrubbed) {
+            tracing::warn!("nao consegui gravar o cache do rustypipe: {e}");
+            return;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600));
+        }
+    }
+
+    fn read(&self) -> Option<String> {
+        std::fs::read_to_string(&self.path).ok()
     }
 }
 

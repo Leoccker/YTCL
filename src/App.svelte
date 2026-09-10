@@ -1,6 +1,10 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import DebugOverlay from "./lib/components/DebugOverlay.svelte";
+  import ReconnectBanner from "./lib/components/ReconnectBanner.svelte";
   import Search from "./lib/views/Search.svelte";
+  import Library from "./lib/views/Library.svelte";
+  import { auth } from "./lib/stores/auth.svelte";
 
   type Route = "home" | "search" | "library";
 
@@ -11,6 +15,10 @@
   ];
 
   let current = $state<Route>("search");
+
+  onMount(() => {
+    void auth.refresh();
+  });
 
   function onKey(e: KeyboardEvent) {
     if (e.key === "f" && (e.ctrlKey || e.metaKey)) {
@@ -37,25 +45,43 @@
       </button>
     {/each}
 
-    <p class="disclaimer">
-      Não afiliado ao Google ou ao YouTube.
-    </p>
+    <div class="account">
+      {#if auth.account}
+        <span class="who" title={auth.account.label}>
+          {auth.expired ? "⚠ " : ""}{auth.account.label}
+        </span>
+        <button class="acct-btn" onclick={() => auth.logout(auth.account!.id)}>
+          sair
+        </button>
+      {:else}
+        <button
+          class="acct-btn"
+          onclick={() => {
+            current = "library";
+          }}
+        >
+          Entrar
+        </button>
+      {/if}
+    </div>
+
+    <p class="disclaimer">Não afiliado ao Google ou ao YouTube.</p>
   </nav>
 
   <main class="content">
-    {#if current === "search"}
-      <Search />
-    {:else if current === "home"}
-      <div class="placeholder">
-        <h1>Início</h1>
-        <p>Recomendações entram depois da autenticação (fase 2).</p>
-      </div>
-    {:else}
-      <div class="placeholder">
-        <h1>Biblioteca</h1>
-        <p>Precisa de conta conectada — fase 2.</p>
-      </div>
-    {/if}
+    <ReconnectBanner />
+    <div class="view">
+      {#if current === "search"}
+        <Search />
+      {:else if current === "library"}
+        <Library />
+      {:else}
+        <div class="placeholder">
+          <h1>Início</h1>
+          <p>Recomendações entram numa fase futura.</p>
+        </div>
+      {/if}
+    </div>
   </main>
 
   <footer class="player">
@@ -106,8 +132,33 @@
     color: var(--text);
   }
 
-  .disclaimer {
+  .account {
     margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  .who {
+    font-size: 12px;
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+  .acct-btn {
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .acct-btn:hover {
+    color: var(--text);
+  }
+
+  .disclaimer {
     padding: var(--space-3);
     font-size: 11px;
     line-height: 1.4;
@@ -116,6 +167,13 @@
 
   .content {
     grid-area: content;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .view {
+    flex: 1;
     min-height: 0;
     overflow: hidden;
   }

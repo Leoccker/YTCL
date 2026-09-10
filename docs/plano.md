@@ -53,8 +53,8 @@ perfil de risco de "um binário na minha máquina" do de "um serviço público" 
 |---|---|
 | 0 — Fundação | **concluída** (2026-09-09) |
 | 1 — Metadados e busca | **concluída** (2026-09-09) |
-| 2 — Autenticação | próxima |
-| 3 — Reprodução | — |
+| 2 — Autenticação | **concluída** (2026-09-10) |
+| 3 — Reprodução | próxima |
 | 4 — UI completa | — |
 | 5 — Empacotamento | — |
 
@@ -65,6 +65,12 @@ e o overlay de diagnóstico (F3).
 **Fase 1** entregou o adaptador InnerTube, o cache SQLite com
 stale-while-revalidate, o download de capas sob demanda e a tela de busca com
 lista virtualizada.
+
+**Fase 2** entregou o cofre de contas (`ytcl-core/src/auth.rs`, cookie no
+keyring do SO), a janela de login do Google (`src-tauri/src/login_window.rs`), a
+re-hidratação da sessão no boot, os comandos de biblioteca e a tela de
+biblioteca com abas (playlists, álbuns, artistas, curtidas) mais o banner de
+reconexão.
 
 ### Correções de rota
 
@@ -88,12 +94,35 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
   Como o handler já recebe o hash, deixá-lo resolver a URL pelo cache e baixar
   na hora tira o frontend da equação: ele só aponta um `<img>` e o webview
   espera como esperaria qualquer imagem da rede. *(Fase 1)*
+- **O `rookie` (importar cookies do navegador) saiu.** O plano listava como
+  caminho alternativo de login. Ele depende de `rusqlite 0.31`, que fixa
+  `libsqlite3-sys 0.28`, e o nosso cache usa `rusqlite 0.40` / `libsqlite3-sys
+  0.38` — dois crates linkando `sqlite3`, o que o cargo recusa. O fallback sem
+  webview passou a ser **colar o cookie manualmente** (zero dependências, cobre
+  o mesmo caso: quem não quer a janela embutida). *(Fase 2)*
+- **`ScrubbedStorage` no lugar de um `CacheStorage` custom no keyring.** O plano
+  falava em gravar os cookies no keyring; a parte nova é que o rustypipe insiste
+  em persistir `auth_cookie`/`oauth_token` no próprio cache JSON. A solução é um
+  `CacheStorage` que remove esses dois campos antes de gravar — o resto do cache
+  (versões de cliente, JS de decifragem) continua em disco, e a sessão é
+  re-injetada do keyring a cada abertura. *(Fase 2)*
 - **Stale-while-revalidate sem eventos.** Em vez de emitir um evento quando a
   revalidação termina, os comandos devolvem `{ data, stale }` e o frontend
   repete a chamada com `refresh: true`. Menos peças móveis, mesmo efeito.
   *(Fase 1)*
 
 ---
+
+## Problemas conhecidos
+
+- **`music_saved_playlists` do rustypipe está quebrado.** A aba de Playlists da
+  biblioteca dá `missing field items` — o YouTube mudou o formato da resposta
+  do feed `FEmusic_liked_playlists` depois de abril de 2025 e o rustypipe
+  0.11.4 (última versão, e o HEAD do repositório dele também) não acompanhou.
+  As outras três rotas de biblioteca — álbuns, artistas, curtidas — funcionam
+  (`cargo run -p ytcl-core --example library` confirma). A UI isola o erro
+  nessa aba, com botão de repetir. Conserto: reimplementar a rota em
+  `innertube.rs` chamando o browse do InnerTube direto, ou esperar o upstream.
 
 ## Arquitetura
 

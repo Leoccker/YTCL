@@ -142,6 +142,56 @@ export const playlist = (id: string, refresh = false) =>
 export const playlistTracks = (id: string, continuation?: string) =>
   invoke<Page<Track>>("playlist_tracks", { id, continuation });
 
+// --- contas -------------------------------------------------------------
+
+export interface Account {
+  id: string;
+  label: string;
+  addedAt: number;
+}
+
+export type Session =
+  | { kind: "logged_out" }
+  | { kind: "active"; account: Account }
+  | { kind: "expired"; account: Account };
+
+export interface AuthStatus {
+  session: Session;
+  accounts: Account[];
+}
+
+export const authStatus = () => invoke<AuthStatus>("auth_status");
+
+/** Abre a janela de login do Google. Resolve quando a conta é conectada. */
+export const authLoginGoogle = () => invoke<Account>("auth_login_google");
+
+/** Alternativa: o usuário cola o cabeçalho Cookie ou um cookies.txt. */
+export const authLoginCookie = (cookie: string) =>
+  invoke<Account>("auth_login_cookie", { cookie });
+
+export const authSwitch = (id: string) =>
+  invoke<Session>("auth_switch", { id });
+
+export const authReconnect = () => invoke<Session>("auth_reconnect");
+
+export const authLogout = (id: string) =>
+  invoke<Session>("auth_logout", { id });
+
+export const authRename = (id: string, label: string) =>
+  invoke<Account[]>("auth_rename", { id, label });
+
+// --- biblioteca (exige conta) -----------------------------------------
+
+export const libraryPlaylists = () =>
+  invoke<Playlist[]>("library_playlists");
+
+export const libraryAlbums = () => invoke<Album[]>("library_albums");
+
+export const libraryArtists = () => invoke<Artist[]>("library_artists");
+
+export const likedSongs = (continuation?: string) =>
+  invoke<Page<Track>>("liked_songs", { continuation });
+
 // --- capas ---------------------------------------------------------------
 
 /**

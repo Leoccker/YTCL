@@ -11,6 +11,7 @@ use serde::Serialize;
 use tauri::State;
 use ytcl_core::cache::Entry;
 use ytcl_core::error::ErrorPayload;
+use ytcl_core::metadata::MetadataSource;
 use ytcl_core::model::{
     Album, ArtRef, Artist, Page, Playlist, SearchFilter, SearchItem, Track,
 };
@@ -42,7 +43,7 @@ impl<T> Cached<T> {
 /// Sem isto o handler do `ytmart://` recebe um hash que nao sabe resolver, e
 /// a imagem nunca aparece. E o unico acoplamento entre buscar metadado e
 /// exibir capa — e vale o preco de manter o IPC livre de imagens.
-fn remember_art(state: &AppState, arts: impl Iterator<Item = ArtRef>) {
+pub(crate) fn remember_art(state: &AppState, arts: impl Iterator<Item = ArtRef>) {
     for art in arts {
         state.cache.remember_art(&art.hash, &art.url);
     }
