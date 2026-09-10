@@ -59,7 +59,8 @@ sudo apt install -y libwebkit2gtk-4.1-dev libssl-dev \
 Visual Studio Build Tools (C++), WebView2 Runtime (já vem no Windows 11), e a
 `libmpv-2.dll` — que o bundler empacota como recurso.
 
-Além disso: [Rust](https://rustup.rs) e Node 20+.
+Além disso: [Rust](https://rustup.rs), Node 20+ e **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** no PATH
+(usado para resolver o stream de áudio; a busca funciona sem ele, tocar não).
 
 ## Desenvolvimento
 
