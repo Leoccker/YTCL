@@ -126,7 +126,7 @@ items` ao paginar. O `[patch.crates-io]` na raiz do `Cargo.toml` aponta para
 
 - **Fork:** `https://codeberg.org/Leoccker/rustypipe` (branch `main`), base
   `v0.11.4` + um commit.
-- **PR upstream:** _(ainda não enviado — anotar a URL aqui quando for)_
+- **PR upstream:** https://codeberg.org/ThetaDev/rustypipe/pulls/87
 - **Verificado:** as quatro rotas de biblioteca passam
   (`cargo run -p ytcl-core --example library`); regressão em
   `innertube_live.rs::library_playlists_pagina_ate_o_fim_sem_quebrar`.
