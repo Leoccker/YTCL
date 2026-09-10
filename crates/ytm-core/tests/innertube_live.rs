@@ -26,17 +26,44 @@ async fn busca_generica_devolve_itens_de_varios_tipos() {
 
     assert!(!page.items.is_empty(), "busca nao devolveu nada");
 
-    let tem_faixa = page.items.iter().any(|i| matches!(i, SearchItem::Track(_)));
-    let tem_artista = page.items.iter().any(|i| matches!(i, SearchItem::Artist(_)));
-    assert!(tem_faixa || tem_artista, "nenhum resultado reconhecivel");
+    let faixas: Vec<_> = page
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            SearchItem::Track(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    let artistas = page.items.iter().filter(|i| matches!(i, SearchItem::Artist(_))).count();
 
-    // Toda faixa precisa de id e titulo; sem isso nao da nem para tocar.
-    for item in &page.items {
-        if let SearchItem::Track(t) = item {
-            assert!(!t.id.is_empty(), "faixa sem videoId");
-            assert!(!t.title.is_empty(), "faixa sem titulo");
-        }
+    assert!(!faixas.is_empty(), "nenhuma faixa nos resultados");
+    assert!(artistas > 0, "nenhum artista nos resultados");
+
+    for t in &faixas {
+        assert!(!t.id.is_empty(), "faixa sem videoId");
+        assert!(!t.title.is_empty(), "faixa sem titulo");
+
+        // As tres proximas checagens existem porque o `music_search_main` do
+        // rustypipe passava nas anteriores devolvendo lixo: duracao ausente e
+        // o rotulo da categoria ("Song") no lugar do nome do artista. Foi o
+        // que motivou trocar a busca "tudo" por tres buscas filtradas.
+        assert!(
+            t.duration_secs.is_some(),
+            "faixa \"{}\" sem duracao",
+            t.title
+        );
+        assert!(!t.artists.is_empty(), "faixa \"{}\" sem artista", t.title);
+        assert!(
+            !t.artists.iter().any(|a| a.name == "Song" || a.name == "Video"),
+            "faixa \"{}\" com rotulo de categoria no lugar do artista: {:?}",
+            t.title,
+            t.artists
+        );
     }
+
+    // Capa e o que a UI mostra em toda linha; sem ela a lista fica cega.
+    let com_capa = page.items.iter().filter(|i| art_of(i).is_some()).count();
+    assert_eq!(com_capa, page.items.len(), "ha itens sem capa");
 }
 
 #[tokio::test]
@@ -87,5 +114,14 @@ fn id_of(item: &SearchItem) -> Option<&str> {
         SearchItem::Album(a) => Some(&a.id),
         SearchItem::Artist(a) => Some(&a.id),
         SearchItem::Playlist(p) => Some(&p.id),
+    }
+}
+
+fn art_of(item: &SearchItem) -> Option<&ytm_core::model::ArtRef> {
+    match item {
+        SearchItem::Track(t) => t.art.as_ref(),
+        SearchItem::Album(a) => a.art.as_ref(),
+        SearchItem::Artist(a) => a.art.as_ref(),
+        SearchItem::Playlist(p) => p.art.as_ref(),
     }
 }

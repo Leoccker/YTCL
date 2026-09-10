@@ -30,6 +30,12 @@ const ART_CARD: u32 = 320;
 /// milhares de itens deixaria o primeiro carregamento pendurado.
 const LIBRARY_LIMIT: usize = 1000;
 
+/// Quantos itens de cada tipo a busca "tudo" mostra antes de o usuario
+/// escolher um filtro.
+const ALL_ARTISTS: usize = 3;
+const ALL_TRACKS: usize = 12;
+const ALL_ALBUMS: usize = 8;
+
 pub struct InnerTube {
     rp: RustyPipe,
 }
@@ -49,6 +55,57 @@ impl InnerTube {
 
     fn query(&self) -> RustyPipeQuery {
         self.rp.query()
+    }
+
+    /// Busca "tudo": artistas, musicas e albuns em paralelo.
+    ///
+    /// Nao usamos `music_search_main`. Ele mapeia a pagina de "melhores
+    /// resultados" do YouTube Music, que e rasa de proposito: devolve ~4 itens
+    /// sem duracao, e o campo de artista traz o rotulo da categoria ("Song")
+    /// no lugar do nome. Tres buscas filtradas em paralelo custam o mesmo
+    /// tempo de parede e devolvem dados completos.
+    async fn search_all(&self, query: &str) -> Result<Page<SearchItem>> {
+        let q = self.query();
+
+        let (artistas, musicas, albuns) = tokio::join!(
+            q.music_search_artists(query),
+            q.music_search_tracks(query),
+            q.music_search_albums(query),
+        );
+
+        let mut items = Vec::new();
+        let mut algum_erro = None;
+
+        // Uma secao que falha nao pode zerar a busca inteira: aproveitamos o
+        // que veio e so propagamos o erro se nada tiver vindo.
+        match artistas {
+            Ok(r) => items.extend(
+                r.items.items.into_iter().take(ALL_ARTISTS).map(|a| SearchItem::Artist(artist_from(a))),
+            ),
+            Err(e) => algum_erro = Some(map_err(e)),
+        }
+        match musicas {
+            Ok(r) => items.extend(
+                r.items.items.into_iter().take(ALL_TRACKS).map(|t| SearchItem::Track(track_from(t))),
+            ),
+            Err(e) => algum_erro = Some(map_err(e)),
+        }
+        match albuns {
+            Ok(r) => items.extend(
+                r.items.items.into_iter().take(ALL_ALBUMS).map(|a| SearchItem::Album(album_from(a))),
+            ),
+            Err(e) => algum_erro = Some(map_err(e)),
+        }
+
+        if items.is_empty() {
+            if let Some(e) = algum_erro {
+                return Err(e);
+            }
+        }
+
+        // Sem continuacao: para ver mais de um tipo, o usuario escolhe o
+        // filtro correspondente — que e como o proprio YTM se comporta.
+        Ok(Page::new(items))
     }
 }
 
@@ -212,13 +269,7 @@ impl MetadataSource for InnerTube {
         // Cada filtro devolve um tipo concreto diferente, entao a conversao
         // para SearchItem acontece por braco.
         Ok(match filter {
-            SearchFilter::All => {
-                let r = q.music_search_main(query).await.map_err(map_err)?;
-                Page {
-                    continuation: cursor_of(&r.items),
-                    items: r.items.items.into_iter().filter_map(search_item_from).collect(),
-                }
-            }
+            SearchFilter::All => return self.search_all(query).await,
             SearchFilter::Songs => {
                 let r = q.music_search_tracks(query).await.map_err(map_err)?;
                 Page {
