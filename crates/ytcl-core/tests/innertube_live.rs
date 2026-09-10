@@ -125,3 +125,41 @@ fn art_of(item: &SearchItem) -> Option<&ytcl_core::model::ArtRef> {
         SearchItem::Playlist(p) => p.art.as_ref(),
     }
 }
+
+// --- autenticação --------------------------------------------------------
+
+#[tokio::test]
+#[ignore = "precisa de rede"]
+async fn cookie_invalido_vira_sessao_expirada_sem_travar() {
+    let it = client();
+
+    // Um cookie sintático mas sem valer nada. O rustypipe vai buscar o
+    // youtube.com com ele e não vai achar os cabeçalhos de sessão.
+    let res = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        it.set_cookie("SID=nope; HSID=nope; SAPISID=nope"),
+    )
+    .await
+    .expect("set_cookie não pode pendurar");
+
+    assert!(
+        matches!(res, Err(ytcl_core::CoreError::SessionExpired)),
+        "cookie ruim deveria dar SessionExpired, deu {res:?}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "precisa de rede"]
+async fn biblioteca_sem_login_reclama_de_autenticacao() {
+    use ytcl_core::metadata::MetadataSource;
+
+    let it = client();
+    let res = it.library_playlists().await;
+    assert!(
+        matches!(
+            res,
+            Err(ytcl_core::CoreError::SessionExpired | ytcl_core::CoreError::Unauthenticated)
+        ),
+        "sem cookie, a biblioteca deveria pedir login, deu {res:?}"
+    );
+}
