@@ -4,10 +4,6 @@ Cliente de desktop para Linux e Windows que fala direto com a API interna do
 YouTube (InnerTube). Sem Chromium embutido: a UI é Svelte sobre o webview do
 sistema, o núcleo é Rust e o áudio passa pelo libmpv.
 
-> **Aviso.** Este projeto usa a API interna do YouTube, que não é pública nem
-> documentada. Isso é zona cinzenta em relação aos Termos de Serviço do Google,
-> e a API muda sem aviso. Uso pessoal; sem distribuição em lojas oficiais e sem
-> monetização.
 
 ## Estado
 
