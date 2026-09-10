@@ -3,8 +3,98 @@
  *
  * Manter os wrappers tipados aqui significa que uma mudanca de assinatura no
  * Rust quebra o `svelte-check` num arquivo, e nao espalhado por dez views.
+ *
+ * O Rust serializa os modelos em camelCase (`#[serde(rename_all)]`), entao
+ * nao ha conversao de nomes aqui — os tipos abaixo espelham o que chega.
  */
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+
+// --- modelos -------------------------------------------------------------
+
+export interface ArtRef {
+  hash: string;
+  url: string;
+  width: number;
+  height: number;
+}
+
+export interface ArtistRef {
+  id: string | null;
+  name: string;
+}
+
+export interface AlbumRef {
+  id: string | null;
+  title: string;
+}
+
+export interface Track {
+  id: string;
+  title: string;
+  artists: ArtistRef[];
+  album: AlbumRef | null;
+  durationSecs: number | null;
+  art: ArtRef | null;
+  isExplicit: boolean;
+  setVideoId: string | null;
+}
+
+export interface Album {
+  id: string;
+  title: string;
+  artists: ArtistRef[];
+  year: number | null;
+  art: ArtRef | null;
+  trackCount: number | null;
+}
+
+export interface Artist {
+  id: string;
+  name: string;
+  art: ArtRef | null;
+  subscribers: string | null;
+}
+
+export interface Playlist {
+  id: string;
+  title: string;
+  author: string | null;
+  art: ArtRef | null;
+  trackCount: number | null;
+}
+
+export type SearchItem =
+  | ({ type: "track" } & Track)
+  | ({ type: "album" } & Album)
+  | ({ type: "artist" } & Artist)
+  | ({ type: "playlist" } & Playlist);
+
+export interface Page<T> {
+  items: T[];
+  /** Token opaco. Devolver ao backend sem interpretar. */
+  continuation: string | null;
+}
+
+/** Resposta de leitura: `stale` pede uma revalidação. */
+export interface Cached<T> {
+  data: T;
+  stale: boolean;
+}
+
+export type SearchFilter = "all" | "songs" | "albums" | "artists" | "playlists";
+
+export interface ErrorPayload {
+  kind:
+    | "unauthenticated"
+    | "session_expired"
+    | "network"
+    | "parse"
+    | "not_found"
+    | "other";
+  message: string;
+}
+
+// --- comandos ------------------------------------------------------------
 
 export interface AppInfo {
   version: string;
@@ -12,61 +102,63 @@ export interface AppInfo {
   cacheDir: string;
 }
 
-export interface Config {
-  volume: number;
-  artCacheMb: number;
-  preferOpus: boolean;
-  normalizeVolume: boolean;
-  lastAccountId: string | null;
-}
-
 export interface MemInfo {
-  /** PSS: memória compartilhada dividida entre os processos. É o número real. */
+  /** PSS: memória compartilhada dividida entre os processos. */
   pssMb: number | null;
-  /** RSS somado: infla, porque conta as libs compartilhadas uma vez por processo. */
+  /** RSS somado: é o critério de aceite (alvo < 500 MB). */
   rssMb: number | null;
   processCount: number;
 }
 
-/** O Rust serializa em snake_case; convertemos na fronteira. */
-function camel<T>(obj: Record<string, unknown>): T {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k.replace(/_(\w)/g, (_, c: string) => c.toUpperCase())] = v;
-  }
-  return out as T;
+export const appInfo = () => invoke<AppInfo>("app_info");
+export const memInfo = () => invoke<MemInfo>("mem_info");
+
+export const search = (query: string, filter: SearchFilter, refresh = false) =>
+  invoke<Cached<Page<SearchItem>>>("search", { query, filter, refresh });
+
+export const searchMore = (continuation: string) =>
+  invoke<Page<SearchItem>>("search_more", { continuation });
+
+export interface AlbumView {
+  album: Album;
+  tracks: Track[];
 }
 
-function snake(obj: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    out[k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)] = v;
-  }
-  return out;
+export const album = (id: string, refresh = false) =>
+  invoke<Cached<AlbumView>>("album", { id, refresh });
+
+export interface ArtistView {
+  artist: Artist;
+  tracks: Track[];
+  albums: Album[];
 }
 
-export async function appInfo(): Promise<AppInfo> {
-  return camel(await invoke("app_info"));
-}
+export const artist = (id: string, refresh = false) =>
+  invoke<Cached<ArtistView>>("artist", { id, refresh });
 
-export async function getConfig(): Promise<Config> {
-  return camel(await invoke("get_config"));
-}
+export const playlist = (id: string, refresh = false) =>
+  invoke<Cached<Playlist>>("playlist", { id, refresh });
 
-export async function setConfig(config: Config): Promise<void> {
-  await invoke("set_config", { config: snake(config as unknown as Record<string, unknown>) });
-}
+export const playlistTracks = (id: string, continuation?: string) =>
+  invoke<Page<Track>>("playlist_tracks", { id, continuation });
 
-export async function memInfo(): Promise<MemInfo> {
-  return camel(await invoke("mem_info"));
-}
+// --- capas ---------------------------------------------------------------
 
 /**
  * URL de uma capa.
  *
- * Isto NAO faz IPC: monta a URL do protocolo custom e o `<img>` cuida do
- * resto. Ver `src-tauri/src/protocol.rs` para o porque.
+ * Isto NÃO faz IPC: monta a URL do protocolo custom e o `<img>` cuida do
+ * resto — inclusive de esperar o download na primeira vez. Ver
+ * `src-tauri/src/protocol.rs`.
  */
-export function artUrl(hash: string | null | undefined): string | null {
-  return hash ? convertFileSrc(hash, "ytmart") : null;
+export function artUrl(art: ArtRef | null | undefined): string | null {
+  return art ? convertFileSrc(art.hash, "ytmart") : null;
+}
+
+/** Erros do backend chegam como objeto, não como Error. */
+export function errorMessage(e: unknown): string {
+  if (e && typeof e === "object" && "message" in e) {
+    return String((e as ErrorPayload).message);
+  }
+  return String(e);
 }

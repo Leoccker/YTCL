@@ -4,24 +4,26 @@
 //! erro classico que engasga a rolagem de uma grade de albuns — serializa,
 //! trafega, decodifica em JS, tudo na thread principal do webview. Servindo
 //! por um protocolo custom, o `<img>` vira uma imagem normal: o webview
-//! decodifica fora da thread principal, cacheia sozinho e o IPC fica livre
-//! para o que importa.
+//! decodifica fora da thread principal, cacheia sozinho e o IPC fica livre.
+//!
+//! O handler e assincrono e baixa a capa no primeiro acesso. Por isso o
+//! frontend nao precisa orquestrar download nenhum: ele aponta o `<img>` para
+//! `ytmart://<hash>` e o webview espera como esperaria qualquer imagem.
 //!
 //! URL no Linux: `ytmart://localhost/<hash>`
 //! URL no Windows: `http://ytmart.localhost/<hash>`
 //! O frontend nao precisa saber disso — usa `convertFileSrc(hash, "ytmart")`.
 
-use std::path::PathBuf;
+use std::sync::Arc;
 
 use tauri::http::{Request, Response, StatusCode};
 use ytm_core::artwork;
 
+use crate::state::AppState;
+
 /// Extrai o hash da URI, seja qual for a forma que a plataforma usa.
 fn hash_from_uri(uri: &str) -> Option<&str> {
-    let path = uri
-        .split_once("://")
-        .map(|(_, rest)| rest)
-        .unwrap_or(uri);
+    let path = uri.split_once("://").map(|(_, rest)| rest).unwrap_or(uri);
     // Depois do host vem `/<hash>`; sem host, o proprio caminho ja e o hash.
     let last = path.rsplit('/').next()?;
     let last = last.split(['?', '#']).next()?;
@@ -35,11 +37,21 @@ fn not_found() -> Response<Vec<u8>> {
         .expect("resposta 404 e sempre valida")
 }
 
-/// Serve um arquivo do cache de capas.
+fn image(bytes: Vec<u8>) -> Response<Vec<u8>> {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "image/jpeg")
+        // O conteudo e imutavel: a chave e o hash da URL de origem.
+        .header("Cache-Control", "public, max-age=31536000, immutable")
+        .body(bytes)
+        .expect("resposta 200 e sempre valida")
+}
+
+/// Serve uma capa, baixando-a se for o primeiro acesso.
 ///
 /// A validacao do hash (32 chars hex, gerados por nos) e o que impede path
-/// traversal: nenhum caminho vindo da URI e concatenado sem passar por ela.
-pub fn serve(art_dir: &PathBuf, request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
+/// traversal: nenhum caminho vindo da URI chega ao disco sem passar por ela.
+pub async fn serve(state: Arc<AppState>, request: Request<Vec<u8>>) -> Response<Vec<u8>> {
     let uri = request.uri().to_string();
 
     let Some(hash) = hash_from_uri(&uri) else {
@@ -51,18 +63,20 @@ pub fn serve(art_dir: &PathBuf, request: &Request<Vec<u8>>) -> Response<Vec<u8>>
         return not_found();
     }
 
-    let path = artwork::path_for(art_dir, hash);
+    // De onde baixar, se ainda nao estiver em disco. Sem esse mapa o hash
+    // sozinho nao diz nada — e por isso que o adaptador registra a URL de
+    // cada capa que converte.
+    let Some(url) = state.cache.art_url(hash) else {
+        tracing::debug!("ytmart: hash sem URL conhecida: {hash}");
+        return not_found();
+    };
 
-    match std::fs::read(&path) {
-        Ok(bytes) => Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "image/jpeg")
-            // O conteudo e imutavel: a chave e o hash da URL de origem.
-            .header("Cache-Control", "public, max-age=31536000, immutable")
-            .header("Access-Control-Allow-Origin", "*")
-            .body(bytes)
-            .expect("resposta 200 e sempre valida"),
-        Err(_) => not_found(),
+    match state.artwork.ensure(hash, &url).await {
+        Ok(bytes) => image(bytes),
+        Err(e) => {
+            tracing::debug!("ytmart: falha ao obter {hash}: {e}");
+            not_found()
+        }
     }
 }
 

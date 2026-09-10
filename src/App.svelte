@@ -1,26 +1,26 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import DebugOverlay from "./lib/components/DebugOverlay.svelte";
-  import { appInfo, type AppInfo } from "./lib/api";
+  import Search from "./lib/views/Search.svelte";
 
-  let info = $state<AppInfo | null>(null);
-  let error = $state<string | null>(null);
+  type Route = "home" | "search" | "library";
 
-  onMount(async () => {
-    try {
-      info = await appInfo();
-    } catch (e) {
-      error = String(e);
-    }
-  });
-
-  const nav = [
+  const nav: { id: Route; label: string }[] = [
     { id: "home", label: "Início" },
     { id: "search", label: "Buscar" },
     { id: "library", label: "Biblioteca" },
   ];
-  let current = $state("home");
+
+  let current = $state<Route>("search");
+
+  function onKey(e: KeyboardEvent) {
+    if (e.key === "f" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      current = "search";
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onKey} />
 
 <DebugOverlay />
 
@@ -39,22 +39,18 @@
   </nav>
 
   <main class="content">
-    {#if error}
-      <p class="error">Falha ao falar com o backend: {error}</p>
-    {:else if info}
-      <h1>Fase 0 — fundação</h1>
-      <p class="dim">
-        IPC funcionando. Versão {info.version}.
-      </p>
-      <dl>
-        <dt>config</dt>
-        <dd>{info.configDir}</dd>
-        <dt>cache</dt>
-        <dd>{info.cacheDir}</dd>
-      </dl>
-      <p class="dim">Pressione <kbd>F3</kbd> para o overlay de performance.</p>
+    {#if current === "search"}
+      <Search />
+    {:else if current === "home"}
+      <div class="placeholder">
+        <h1>Início</h1>
+        <p>Recomendações entram depois da autenticação (fase 2).</p>
+      </div>
     {:else}
-      <p class="dim">carregando…</p>
+      <div class="placeholder">
+        <h1>Biblioteca</h1>
+        <p>Precisa de conta conectada — fase 2.</p>
+      </div>
     {/if}
   </main>
 
@@ -108,8 +104,19 @@
 
   .content {
     grid-area: content;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .placeholder {
     padding: var(--space-8);
+  }
+  .placeholder h1 {
+    margin: 0 0 var(--space-2);
+    font-size: 22px;
+  }
+  .placeholder p {
+    color: var(--text-dim);
   }
 
   .player {
@@ -121,41 +128,7 @@
     padding: 0 var(--space-4);
   }
 
-  h1 {
-    margin: 0 0 var(--space-2);
-    font-size: 22px;
-  }
-
   .dim {
     color: var(--text-dim);
-  }
-
-  .error {
-    color: #f87171;
-  }
-
-  dl {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--space-1) var(--space-4);
-    margin: var(--space-6) 0;
-    font-family: var(--font-mono);
-    font-size: 12px;
-  }
-  dt {
-    color: var(--text-faint);
-  }
-  dd {
-    margin: 0;
-    color: var(--text-dim);
-  }
-
-  kbd {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 1px 5px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
   }
 </style>

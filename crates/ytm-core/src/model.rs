@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Referencia a uma capa. `hash` e a chave no cache em disco; o frontend
 /// monta a URL `ytmart://<hash>` e deixa o webview cuidar do resto.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ArtRef {
     pub hash: String,
     /// URL original, guardada para o download preguicoso na primeira vez.
@@ -18,18 +19,21 @@ pub struct ArtRef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ArtistRef {
     pub id: Option<String>,
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AlbumRef {
     pub id: Option<String>,
     pub title: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Track {
     /// videoId do YouTube. E a chave de tudo: cache, fila, resolucao de stream.
     pub id: String,
@@ -44,6 +48,7 @@ pub struct Track {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Album {
     pub id: String,
     pub title: String,
@@ -54,6 +59,7 @@ pub struct Album {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Artist {
     pub id: String,
     pub name: String,
@@ -62,6 +68,7 @@ pub struct Artist {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Playlist {
     pub id: String,
     pub title: String,
@@ -94,6 +101,7 @@ pub enum SearchFilter {
 /// Pagina de resultados. `continuation` e opaco: vem do InnerTube e volta
 /// para ele sem o frontend interpretar.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Page<T> {
     pub items: Vec<T>,
     pub continuation: Option<String>,

@@ -1,10 +1,13 @@
 use serde::Serialize;
+use std::sync::Arc;
+
 use tauri::State;
 use ytm_core::config::Config;
 
 use crate::state::AppState;
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppInfo {
     pub version: &'static str,
     pub config_dir: String,
@@ -12,7 +15,7 @@ pub struct AppInfo {
 }
 
 #[tauri::command]
-pub fn app_info(state: State<'_, AppState>) -> AppInfo {
+pub fn app_info(state: State<'_, Arc<AppState>>) -> AppInfo {
     AppInfo {
         version: env!("CARGO_PKG_VERSION"),
         config_dir: state.paths.config_dir.display().to_string(),
@@ -21,11 +24,11 @@ pub fn app_info(state: State<'_, AppState>) -> AppInfo {
 }
 
 #[tauri::command]
-pub fn get_config(state: State<'_, AppState>) -> Config {
+pub fn get_config(state: State<'_, Arc<AppState>>) -> Config {
     state.config()
 }
 
 #[tauri::command]
-pub fn set_config(state: State<'_, AppState>, config: Config) {
+pub fn set_config(state: State<'_, Arc<AppState>>, config: Config) {
     state.update_config(config);
 }

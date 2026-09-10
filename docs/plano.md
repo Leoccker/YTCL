@@ -36,28 +36,48 @@ trocável.
 | Fase | Estado |
 |---|---|
 | 0 — Fundação | **concluída** (2026-09-09) |
-| 1 — Metadados e busca | próxima |
-| 2 — Autenticação | — |
+| 1 — Metadados e busca | **concluída** (2026-09-09) |
+| 2 — Autenticação | próxima |
 | 3 — Reprodução | — |
 | 4 — UI completa | — |
 | 5 — Empacotamento | — |
 
-O que a Fase 0 entregou: workspace Cargo com `ytm-core` e `ytm-player`, o crate
-Tauri com o protocolo `ytmart://` funcionando, frontend Svelte 5 + Vite, config
-em TOML e o overlay de diagnóstico (F3). App compila e roda em Linux; 7 testes,
-clippy e `svelte-check` limpos; binário de release com 5,3 MB.
+**Fase 0** entregou o workspace Cargo com `ytm-core` e `ytm-player`, o crate
+Tauri com o protocolo `ytmart://`, o frontend Svelte 5 + Vite, a config em TOML
+e o overlay de diagnóstico (F3).
 
-Duas correções de rota que a fase produziu, ambas registradas nas seções abaixo:
+**Fase 1** entregou o adaptador InnerTube, o cache SQLite com
+stale-while-revalidate, o download de capas sob demanda e a tela de busca com
+lista virtualizada.
 
-- O medidor de memória somava RSS da árvore de processos, contando as bibliotecas
-  compartilhadas uma vez por processo. Passou a medir PSS, com RSS ao lado.
-- O alvo de memória de 200 MB era estimativa por analogia, não medição. Com o
-  piso do WebKitGTK medido nesta máquina, passou para 500 MB de RSS.
+### Correções de rota
 
-Pendência conhecida para a Fase 1: verificar com `cargo tree` se `ytmapi-rs` e
-`rustypipe` convergem na mesma versão do `reqwest`. Se não convergirem, o cargo
-compila duas pilhas HTTP inteiras — vale alinhar antes de escolher as features.
+Registradas aqui porque contradizem o que as seções abaixo diziam antes:
 
+- **O medidor de memória somava RSS da árvore de processos**, contando as
+  bibliotecas compartilhadas uma vez por processo. Passou a medir PSS, com RSS
+  ao lado. *(Fase 0)*
+- **O alvo de memória de 200 MB era estimativa por analogia, não medição.** Com
+  o piso do WebKitGTK medido nesta máquina, passou para 500 MB de RSS. *(Fase 0)*
+- **`ytmapi-rs` foi eliminado; o `rustypipe` faz tudo.** O plano previa dividir
+  metadados e stream entre as duas crates, partindo da premissa de que o
+  ytmapi-rs tinha endpoints de YTM mais ricos. A premissa estava errada: o
+  rustypipe cobre busca, álbum, artista, playlist, biblioteca, rádio, letras,
+  autenticação e resolução de stream. Além de simplificar, isso resolveu um
+  conflito real — as duas crates pediam versões incompatíveis do `reqwest`
+  (0.13 contra 0.12), o que faria o cargo compilar duas pilhas HTTP inteiras.
+  *(Fase 1)*
+- **O handler do `ytmart://` virou assíncrono e baixa a capa sob demanda.** O
+  plano previa uma fila de download em `artwork.rs` que o frontend acionaria.
+  Como o handler já recebe o hash, deixá-lo resolver a URL pelo cache e baixar
+  na hora tira o frontend da equação: ele só aponta um `<img>` e o webview
+  espera como esperaria qualquer imagem da rede. *(Fase 1)*
+- **Stale-while-revalidate sem eventos.** Em vez de emitir um evento quando a
+  revalidação termina, os comandos devolvem `{ data, stale }` e o frontend
+  repete a chamada com `refresh: true`. Menos peças móveis, mesmo efeito.
+  *(Fase 1)*
+
+---
 
 ## Arquitetura
 
@@ -106,16 +126,22 @@ navegação é mais leve e mais direto. Svelte compila para JS sem virtual DOM �
 quando o alvo é o WebKitGTK, que é mais lento que o Chromium e agradece menos trabalho em runtime.
 Sem biblioteca de componentes: CSS próprio, variáveis CSS para o tema.
 
-**Dados — `ytmapi-rs` + `rustypipe`, cada um no que é melhor.**
-- `ytmapi-rs` é uma porta em Rust do `ytmusicapi`, com endpoints tipados do YouTube Music (busca
-  com filtros, biblioteca, playlists, artistas, álbuns) e auth por cookie. É a camada de
-  **metadados e navegação**.
-- `rustypipe` é mais forte na parte difícil: decifragem de assinatura e do parâmetro `n`,
-  versionamento dos clientes InnerTube, cache do JS do player, fallback entre identidades de
-  cliente. É a camada de **resolução de stream**.
+**Dados — `rustypipe`, sozinho.** Um cliente InnerTube em Rust que cobre todo o
+escopo do projeto: `music_search` e variantes por filtro, `music_album`,
+`music_artist`, `music_playlist`, a biblioteca do usuário
+(`music_saved_*`, `music_liked_tracks`, `music_history`), `music_radio` e
+`music_lyrics` do roadmap, além da parte difícil — decifragem de assinatura e
+do parâmetro `n`, versionamento dos clientes InnerTube, cache do JS do player e
+`get_po_token`.
 
-Os dois ficam atrás de traits (`MetadataSource`, `StreamResolver`) em `ytm-core`: uma quebra de API
-significa trocar uma implementação, não reescrever o app.
+O plano original dividia isso entre `ytmapi-rs` (metadados) e `rustypipe`
+(stream). A divisão foi descartada na Fase 1: o rustypipe faz os dois, e manter
+as duas crates traria uma duplicação real da pilha HTTP, porque pedem versões
+incompatíveis do `reqwest`.
+
+Ele fica atrás das traits `MetadataSource` e `StreamResolver` em `ytm-core`
+(`crates/ytm-core/src/innertube.rs` é o único arquivo que conhece seus tipos):
+uma quebra da API interna do YouTube tem um lugar só para ser consertada.
 
 **PO token / BotGuard:** as notas do rustypipe indicam que o cliente **YouTube Music envia mas não
 exige** o token `pot`, e o cliente **TV não o usa**. Com as identidades certas, o v1 provavelmente

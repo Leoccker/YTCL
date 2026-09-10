@@ -6,6 +6,7 @@
 use serde::Serialize;
 
 #[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct MemInfo {
     /// PSS somado da arvore de processos. PSS divide cada pagina compartilhada
     /// entre os processos que a usam, entao somar a arvore da o numero real —

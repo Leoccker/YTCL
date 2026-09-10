@@ -1,5 +1,21 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use parking_lot::RwLock;
+use ytm_core::artwork::Fetcher;
+use ytm_core::cache::Cache;
 use ytm_core::config::{Config, Paths};
+use ytm_core::innertube::InnerTube;
+use ytm_core::metadata::MetadataSource;
+
+/// Quantas capas baixamos ao mesmo tempo. Uma grade cheia pede dezenas de
+/// uma vez; sem teto, abriria dezenas de conexoes e nenhuma terminaria antes.
+const ART_CONCURRENCY: usize = 8;
+
+/// TTLs por tipo de conteudo. Busca envelhece rapido porque o ranking do
+/// YouTube muda; album e artista sao praticamente estaticos.
+pub const TTL_SEARCH: Duration = Duration::from_secs(15 * 60);
+pub const TTL_DETAIL: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Estado compartilhado por todos os comandos.
 ///
@@ -8,13 +24,26 @@ use ytm_core::config::{Config, Paths};
 /// mesmo processo so gerariam threads ociosas e confusao.
 pub struct AppState {
     pub paths: Paths,
+    pub cache: Cache,
+    pub artwork: Fetcher,
+    pub innertube: Arc<dyn MetadataSource>,
     config: RwLock<Config>,
 }
 
 impl AppState {
-    pub fn new(paths: Paths) -> Self {
+    pub fn new(paths: Paths) -> anyhow::Result<Self> {
         let config = Config::load(&paths.config_file);
-        Self { paths, config: RwLock::new(config) }
+        let cache = Cache::open(&paths.db_file)?;
+        let artwork = Fetcher::new(paths.art_dir.clone(), ART_CONCURRENCY);
+        let innertube = InnerTube::new(&paths.cache_dir)?;
+
+        Ok(Self {
+            innertube: Arc::new(innertube),
+            cache,
+            artwork,
+            config: RwLock::new(config),
+            paths,
+        })
     }
 
     pub fn config(&self) -> Config {
