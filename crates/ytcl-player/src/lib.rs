@@ -5,10 +5,12 @@
 //! (`symphonia` + `cpal`) se um dia o libmpv virar um problema.
 
 pub mod mpv;
+pub mod player;
 pub mod queue;
 pub mod state;
 
 pub use mpv::{BackendEvent, MpvBackend};
+pub use player::{Player, PlayerSnapshot, QueueEntry};
 pub use queue::Queue;
 pub use state::{PlaybackState, PlayerEvent, RepeatMode};
 

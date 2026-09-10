@@ -45,6 +45,7 @@ pub fn run() {
     }
 
     let protocol_state = state.clone();
+    let setup_state = state.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -79,7 +80,36 @@ pub fn run() {
             commands::library_albums,
             commands::library_artists,
             commands::liked_songs,
+            commands::player_play_tracks,
+            commands::player_toggle,
+            commands::player_next,
+            commands::player_prev,
+            commands::player_seek,
+            commands::player_set_volume,
+            commands::player_set_repeat,
+            commands::player_set_shuffle,
+            commands::player_play_next,
+            commands::player_enqueue,
+            commands::player_move_queue,
+            commands::player_jump_queue,
+            commands::player_snapshot,
+            commands::player_available,
         ])
+        .setup(move |app| {
+            // O player precisa do runtime tokio ativo (usa tokio::spawn), por
+            // isso nasce aqui e nao em AppState::new. A ponte reencaminha
+            // cada PlayerEvent como evento Tauri "player".
+            let app_handle = app.handle().clone();
+            let (to_ui, mut from_player) = tokio::sync::mpsc::unbounded_channel();
+            setup_state.init_player(to_ui);
+            tauri::async_runtime::spawn(async move {
+                use tauri::Emitter;
+                while let Some(ev) = from_player.recv().await {
+                    let _ = app_handle.emit("player", ev);
+                }
+            });
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o app");
 }

@@ -8,6 +8,7 @@ use ytcl_core::auth::{Account, AuthStore, KeyringStore};
 use ytcl_core::cache::Cache;
 use ytcl_core::config::{Config, Paths};
 use ytcl_core::innertube::InnerTube;
+use ytcl_player::{MpvBackend, Player};
 
 /// Quantas capas baixamos ao mesmo tempo. Uma grade cheia pede dezenas de
 /// uma vez; sem teto, abriria dezenas de conexoes e nenhuma terminaria antes.
@@ -42,6 +43,10 @@ pub struct AppState {
     /// Tipo concreto, nao `dyn MetadataSource`: os comandos de biblioteca
     /// precisam de `set_cookie`, que nao esta na trait.
     pub innertube: Arc<InnerTube>,
+    /// `None` ate a inicializacao do mpv (que roda depois, ja no runtime
+    /// tokio) ou se o libmpv nao estiver disponivel — nesse caso a busca e a
+    /// biblioteca seguem funcionando, so a reproducao fica fora.
+    player: RwLock<Option<Arc<Player>>>,
     secrets: KeyringStore,
     session: RwLock<SessionState>,
     config: RwLock<Config>,
@@ -58,6 +63,7 @@ impl AppState {
             innertube: Arc::new(innertube),
             cache,
             artwork,
+            player: RwLock::new(None),
             secrets: KeyringStore,
             session: RwLock::new(SessionState::LoggedOut),
             config: RwLock::new(config),
@@ -67,6 +73,35 @@ impl AppState {
 
     pub fn auth(&self) -> AuthStore<'_> {
         AuthStore::new(&self.secrets)
+    }
+
+    pub fn player(&self) -> Option<Arc<Player>> {
+        self.player.read().clone()
+    }
+
+    /// Cria o backend de audio e o player. Chamado de uma task no boot,
+    /// quando o runtime tokio ja esta ativo. `to_ui` recebe os `PlayerEvent`
+    /// que a ponte reencaminha como evento Tauri.
+    pub fn init_player(
+        &self,
+        to_ui: tokio::sync::mpsc::UnboundedSender<ytcl_player::PlayerEvent>,
+    ) {
+        let (backend_tx, backend_rx) = tokio::sync::mpsc::unbounded_channel();
+        match MpvBackend::new(backend_tx) {
+            Ok(backend) => {
+                let player = Player::new(
+                    Arc::new(backend),
+                    self.innertube.clone(),
+                    backend_rx,
+                    to_ui,
+                );
+                *self.player.write() = Some(player);
+                tracing::info!("player de audio pronto (libmpv)");
+            }
+            Err(e) => {
+                tracing::error!("libmpv indisponivel, reproducao desativada: {e}");
+            }
+        }
     }
 
     pub fn session(&self) -> SessionState {
