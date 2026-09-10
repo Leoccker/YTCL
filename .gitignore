@@ -27,4 +27,4 @@ Thumbs.db
 
 # Logs
 *.log
-/rustypipe_reports
+**/rustypipe_reports/

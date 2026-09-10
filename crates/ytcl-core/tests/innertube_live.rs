@@ -197,3 +197,32 @@ async fn library_playlists_pagina_ate_o_fim_sem_quebrar() {
         assert!(!p.title.is_empty(), "playlist sem título");
     }
 }
+
+#[tokio::test]
+#[ignore = "precisa de yt-dlp + rede"]
+async fn ytdlp_resolve_stream_completo() {
+    use ytcl_core::stream::{AudioCodec, StreamResolver};
+    use ytcl_core::ytdlp::YtDlp;
+
+    let yt = YtDlp::default();
+    yt.check().await.expect("yt-dlp precisa estar no PATH");
+
+    let s = yt.resolve("lYBUbBu4W08").await.expect("resolve");
+    assert!(s.url.starts_with("https://"));
+    assert_eq!(s.codec, AudioCodec::Opus);
+    assert!(s.bitrate > 0);
+    assert!(s.size > 1_000_000, "size suspeito: {}", s.size);
+    assert!(s.duration_secs.unwrap_or(0) > 60);
+
+    // O ponto de trocar de resolver: a URL não pode ser truncada. Um range
+    // perto do fim tem que responder 206.
+    let end = s.size - 1;
+    let start = end - 200_000;
+    let cli = reqwest::Client::new();
+    let mut req = cli.get(&s.url).header("Range", format!("bytes={start}-{end}"));
+    if let Some(ua) = &s.user_agent {
+        req = req.header("User-Agent", ua);
+    }
+    let st = req.send().await.expect("GET").status();
+    assert_eq!(st.as_u16(), 206, "stream truncado (range alto deu {st})");
+}

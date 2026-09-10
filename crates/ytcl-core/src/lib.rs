@@ -12,6 +12,7 @@ pub mod innertube;
 pub mod metadata;
 pub mod model;
 pub mod stream;
+pub mod ytdlp;
 
 pub use error::{CoreError, ErrorKind, ErrorPayload, Result};
 

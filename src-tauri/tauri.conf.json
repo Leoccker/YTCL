@@ -19,7 +19,8 @@
         "minHeight": 520,
         "resizable": true,
         "decorations": true,
-        "theme": "Dark"
+        "theme": "Dark",
+        "label": "main"
       }
     ],
     "security": {
@@ -28,7 +29,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "rpm", "appimage", "msi", "nsis"],
+    "targets": [
+      "deb",
+      "rpm",
+      "appimage",
+      "msi",
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,8 +45,16 @@
     "category": "Music",
     "shortDescription": "Cliente nativo do YouTube Music",
     "linux": {
-      "deb": { "depends": ["libmpv2 | libmpv1"] },
-      "rpm": { "depends": ["mpv-libs"] }
+      "deb": {
+        "depends": [
+          "libmpv2 | libmpv1"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "mpv-libs"
+        ]
+      }
     }
   }
 }

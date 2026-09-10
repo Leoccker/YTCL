@@ -9,8 +9,13 @@ license.workspace = true
 ytcl-core.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
-serde.workspace = true
+serde = { workspace = true, features = ["derive"] }
 tokio.workspace = true
 tracing.workspace = true
 parking_lot.workspace = true
 async-trait = "0.1"
+libmpv2 = "6.0.0"
+libc = "0.2.189"
+base64 = "0.23.1"
+serde_json.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "stream"] }

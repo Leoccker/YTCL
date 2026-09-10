@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use ytcl_core::model::Track;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -10,7 +10,7 @@ pub enum PlaybackState {
     Paused,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RepeatMode {
     Off,
@@ -26,6 +26,7 @@ pub enum RepeatMode {
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum PlayerEvent {
     State { state: PlaybackState },
+    #[serde(rename_all = "camelCase")]
     Position { secs: f64, duration_secs: f64 },
     TrackChanged { track: Box<Track> },
     QueueChanged,
