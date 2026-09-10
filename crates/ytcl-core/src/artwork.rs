@@ -211,7 +211,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn poda_respeita_o_limite_e_preserva_os_recentes() {
-        let dir = std::env::temp_dir().join(format!("ytmc-poda-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ytcl-poda-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn poda_nao_mexe_em_cache_dentro_do_limite() {
-        let dir = std::env::temp_dir().join(format!("ytmc-poda2-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ytcl-poda2-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn poda_em_diretorio_inexistente_nao_estoura() {
-        let dir = std::env::temp_dir().join("ytmc-nao-existe-mesmo");
+        let dir = std::env::temp_dir().join("ytcl-nao-existe-mesmo");
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(prune(&dir, 10).unwrap(), 0);
     }

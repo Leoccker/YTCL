@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{CoreError, Result};
 
 const QUALIFIER: &str = "dev";
-const ORG: &str = "ytmc";
-const APP: &str = "ytmc";
+const ORG: &str = "ytcl";
+const APP: &str = "ytcl";
 
 /// Onde o app guarda config, cache e capas.
 #[derive(Debug, Clone)]
@@ -29,7 +29,7 @@ impl Paths {
 
         Ok(Self {
             art_dir: cache_dir.join("art"),
-            db_file: cache_dir.join("ytmc.db"),
+            db_file: cache_dir.join("ytcl.db"),
             config_file: config_dir.join("config.toml"),
             config_dir,
             cache_dir,

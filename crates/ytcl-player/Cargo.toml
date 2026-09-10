@@ -1,12 +1,12 @@
 [package]
-name = "ytm-player"
+name = "ytcl-player"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-ytm-core.workspace = true
+ytcl-core.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true

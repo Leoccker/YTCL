@@ -1,5 +1,5 @@
 [package]
-name = "ytmc"
+name = "ytcl"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,15 +7,15 @@ license.workspace = true
 description = "Cliente nativo do YouTube Music"
 
 [lib]
-name = "ytmc_lib"
+name = "ytcl_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-ytm-core.workspace = true
-ytm-player.workspace = true
+ytcl-core.workspace = true
+ytcl-player.workspace = true
 
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"

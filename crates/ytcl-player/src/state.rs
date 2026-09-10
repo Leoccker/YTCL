@@ -1,5 +1,5 @@
 use serde::Serialize;
-use ytm_core::model::Track;
+use ytcl_core::model::Track;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

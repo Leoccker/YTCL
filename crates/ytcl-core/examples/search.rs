@@ -1,11 +1,11 @@
 //! Busca pela linha de comando, para exercitar o nucleo sem abrir a UI.
 //!
-//! Uso: cargo run -p ytm-core --example search -- "radiohead" [filtro]
+//! Uso: cargo run -p ytcl-core --example search -- "radiohead" [filtro]
 //! Filtros: all (padrao), songs, albums, artists, playlists
 
-use ytm_core::innertube::InnerTube;
-use ytm_core::metadata::MetadataSource;
-use ytm_core::model::{SearchFilter, SearchItem};
+use ytcl_core::innertube::InnerTube;
+use ytcl_core::metadata::MetadataSource;
+use ytcl_core::model::{SearchFilter, SearchItem};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => SearchFilter::All,
     };
 
-    let dir = std::env::temp_dir().join("ytmc-example");
+    let dir = std::env::temp_dir().join("ytcl-example");
     std::fs::create_dir_all(&dir)?;
     let it = InnerTube::new(&dir)?;
 
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn art_of(i: &SearchItem) -> Option<&ytm_core::model::ArtRef> {
+fn art_of(i: &SearchItem) -> Option<&ytcl_core::model::ArtRef> {
     match i {
         SearchItem::Track(t) => t.art.as_ref(),
         SearchItem::Album(a) => a.art.as_ref(),

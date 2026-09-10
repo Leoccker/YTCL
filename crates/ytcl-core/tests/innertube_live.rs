@@ -4,14 +4,14 @@
 //! nada. Sao o canario do projeto: rodam num cron diario no CI e avisam que a
 //! API interna mudou antes que o usuario descubra sozinho.
 //!
-//! Rodar com: `cargo test -p ytm-core --test innertube_live -- --ignored`
+//! Rodar com: `cargo test -p ytcl-core --test innertube_live -- --ignored`
 
-use ytm_core::innertube::InnerTube;
-use ytm_core::metadata::MetadataSource;
-use ytm_core::model::{SearchFilter, SearchItem};
+use ytcl_core::innertube::InnerTube;
+use ytcl_core::metadata::MetadataSource;
+use ytcl_core::model::{SearchFilter, SearchItem};
 
 fn client() -> InnerTube {
-    let dir = std::env::temp_dir().join("ytmc-test-cache");
+    let dir = std::env::temp_dir().join("ytcl-test-cache");
     std::fs::create_dir_all(&dir).expect("criar cache de teste");
     InnerTube::new(&dir).expect("iniciar cliente")
 }
@@ -117,7 +117,7 @@ fn id_of(item: &SearchItem) -> Option<&str> {
     }
 }
 
-fn art_of(item: &SearchItem) -> Option<&ytm_core::model::ArtRef> {
+fn art_of(item: &SearchItem) -> Option<&ytcl_core::model::ArtRef> {
     match item {
         SearchItem::Track(t) => t.art.as_ref(),
         SearchItem::Album(a) => a.art.as_ref(),

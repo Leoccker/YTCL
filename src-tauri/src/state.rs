@@ -2,11 +2,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::RwLock;
-use ytm_core::artwork::Fetcher;
-use ytm_core::cache::Cache;
-use ytm_core::config::{Config, Paths};
-use ytm_core::innertube::InnerTube;
-use ytm_core::metadata::MetadataSource;
+use ytcl_core::artwork::Fetcher;
+use ytcl_core::cache::Cache;
+use ytcl_core::config::{Config, Paths};
+use ytcl_core::innertube::InnerTube;
+use ytcl_core::metadata::MetadataSource;
 
 /// Quantas capas baixamos ao mesmo tempo. Uma grade cheia pede dezenas de
 /// uma vez; sem teto, abriria dezenas de conexoes e nenhuma terminaria antes.

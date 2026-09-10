@@ -5627,7 +5627,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "ytm-core"
+name = "ytcl"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "ytcl-core",
+ "ytcl-player",
+]
+
+[[package]]
+name = "ytcl-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -5648,7 +5666,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ytm-player"
+name = "ytcl-player"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -5658,25 +5676,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
- "ytm-core",
-]
-
-[[package]]
-name = "ytmc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "parking_lot",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "ytm-core",
- "ytm-player",
+ "ytcl-core",
 ]
 
 [[package]]

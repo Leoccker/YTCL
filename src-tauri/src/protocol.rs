@@ -17,7 +17,7 @@
 use std::sync::Arc;
 
 use tauri::http::{Request, Response, StatusCode};
-use ytm_core::artwork;
+use ytcl_core::artwork;
 
 use crate::state::AppState;
 

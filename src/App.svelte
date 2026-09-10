@@ -26,7 +26,7 @@
 
 <div class="app">
   <nav class="sidebar">
-    <div class="brand">YTMC</div>
+    <div class="brand">YTCL</div>
     {#each nav as item (item.id)}
       <button
         class="nav-item"
@@ -36,6 +36,10 @@
         {item.label}
       </button>
     {/each}
+
+    <p class="disclaimer">
+      Não afiliado ao Google ou ao YouTube.
+    </p>
   </nav>
 
   <main class="content">
@@ -100,6 +104,14 @@
   .nav-item.active {
     background: var(--bg-active);
     color: var(--text);
+  }
+
+  .disclaimer {
+    margin-top: auto;
+    padding: var(--space-3);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-faint);
   }
 
   .content {

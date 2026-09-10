@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::State;
-use ytm_core::cache::Entry;
-use ytm_core::error::ErrorPayload;
-use ytm_core::model::{
+use ytcl_core::cache::Entry;
+use ytcl_core::error::ErrorPayload;
+use ytcl_core::model::{
     Album, ArtRef, Artist, Page, Playlist, SearchFilter, SearchItem, Track,
 };
 
@@ -75,7 +75,7 @@ async fn cached_or_fetch<T, F, Fut>(
 where
     T: serde::Serialize + serde::de::DeserializeOwned,
     F: FnOnce() -> Fut,
-    Fut: std::future::Future<Output = ytm_core::Result<T>>,
+    Fut: std::future::Future<Output = ytcl_core::Result<T>>,
 {
     if !refresh {
         if let Some(entry) = state.cache.get::<T>(key, ttl) {

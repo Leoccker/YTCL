@@ -4,7 +4,7 @@ mod state;
 
 use std::sync::Arc;
 
-use ytm_core::config::Paths;
+use ytcl_core::config::Paths;
 
 use crate::state::AppState;
 
@@ -12,7 +12,7 @@ pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,ytmc=debug,ytm_core=debug".into()),
+                .unwrap_or_else(|_| "info,ytcl=debug,ytcl_core=debug".into()),
         )
         .init();
 
@@ -28,7 +28,7 @@ pub fn run() {
     {
         let art_dir = state.paths.art_dir.clone();
         let limit = state.config().art_cache_mb;
-        std::thread::spawn(move || match ytm_core::artwork::prune(&art_dir, limit) {
+        std::thread::spawn(move || match ytcl_core::artwork::prune(&art_dir, limit) {
             Ok(bytes) => tracing::debug!("cache de capas: {:.1} MB", bytes as f64 / 1e6),
             Err(e) => tracing::warn!("poda do cache de capas falhou: {e}"),
         });

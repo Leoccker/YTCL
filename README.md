@@ -1,9 +1,18 @@
-# YTMC — cliente nativo do YouTube Music
+# YTCL
 
-Cliente de desktop para Linux e Windows que fala direto com a API interna do
-YouTube (InnerTube). Sem Chromium embutido: a UI é Svelte sobre o webview do
-sistema, o núcleo é Rust e o áudio passa pelo libmpv.
+Cliente de desktop, para Linux e Windows, que fala com o YouTube Music pela API
+interna do YouTube (InnerTube). Sem Chromium embutido: a UI é Svelte sobre o
+webview do sistema, o núcleo é Rust e o áudio passa pelo libmpv.
 
+## Aviso
+
+YTCL **não é afiliado, associado, autorizado nem endossado** pelo Google ou pelo
+YouTube. "YouTube" e "YouTube Music" são marcas do Google LLC, usadas aqui só
+para descrever a finalidade do programa.
+
+O projeto acessa a API **interna** do YouTube, que não é pública nem documentada.
+Usá-la contraria os Termos de Serviço do YouTube. É uma ferramenta de uso
+pessoal, fornecida como está, sem garantia. Você responde pelo modo como a usa.
 
 ## Estado
 
@@ -23,8 +32,8 @@ Music, com cache em SQLite e lista virtualizada. Ainda **não reproduz** áudio
 Para exercitar o núcleo sem abrir a UI:
 
 ```sh
-cargo run -p ytm-core --example search -- "radiohead"
-cargo run -p ytm-core --example search -- "caetano veloso" albums
+cargo run -p ytcl-core --example search -- "radiohead"
+cargo run -p ytcl-core --example search -- "caetano veloso" albums
 ```
 
 O plano completo — arquitetura, fases, alvos de performance, riscos — está em
@@ -61,7 +70,7 @@ npm run tauri dev
 
 `F3` abre o overlay de performance: fps, pior frame do último segundo e memória
 da árvore de processos. No Linux o WebKitGTK roda em processos separados
-(`ytmc`, `WebKitWebProcess`, `WebKitNetworkProcess`), então medir só o processo
+(`ytcl`, `WebKitWebProcess`, `WebKitNetworkProcess`), então medir só o processo
 principal esconderia a maior parte.
 
 O overlay mostra dois números de memória. **RSS** é o critério de aceite
@@ -86,8 +95,8 @@ npm run check
 |---|---|---|
 | UI | `src/` | Svelte 5 (runes) + Vite, sem framework de componentes |
 | Ponte | `src-tauri/` | comandos, eventos, protocolo `ytmart://`, janela de login |
-| Núcleo | `crates/ytm-core/` | InnerTube, resolução de stream, cache SQLite, auth |
-| Áudio | `crates/ytm-player/` | libmpv, fila, gapless |
+| Núcleo | `crates/ytcl-core/` | InnerTube, resolução de stream, cache SQLite, auth |
+| Áudio | `crates/ytcl-player/` | libmpv, fila, gapless |
 
 Três regras que sustentam a responsividade e não devem ser quebradas:
 

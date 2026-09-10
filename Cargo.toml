@@ -1,5 +1,5 @@
 [workspace]
-members = ["src-tauri", "crates/ytm-core", "crates/ytm-player"]
+members = ["src-tauri", "crates/ytcl-core", "crates/ytcl-player"]
 resolver = "2"
 
 [workspace.package]
@@ -7,11 +7,11 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.82"
 license = "GPL-3.0-only"
-repository = "https://github.com/leonardo/ytmc"
+repository = "https://github.com/Leoccker/YTCL"
 
 [workspace.dependencies]
-ytm-core = { path = "crates/ytm-core" }
-ytm-player = { path = "crates/ytm-player" }
+ytcl-core = { path = "crates/ytcl-core" }
+ytcl-player = { path = "crates/ytcl-player" }
 
 anyhow = "1"
 thiserror = "2"

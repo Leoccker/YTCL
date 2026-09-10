@@ -24,10 +24,26 @@ O núcleo pesado — cliente InnerTube, resolução de stream, libmpv, cache SQL
 independente da camada de UI.
 
 **Aviso honesto sobre o risco principal:** este app usa a API interna do YouTube, não uma API
-pública documentada. É zona cinzenta em relação aos Termos de Serviço do Google, e a API muda sem
-aviso — a decifragem de assinatura e os identificadores de cliente quebram algumas vezes por ano.
-O projeto exige manutenção contínua. Todo o plano isola essa fragilidade numa única camada
-trocável.
+pública documentada. Usá-la contraria os Termos de Serviço do YouTube, e a API muda sem aviso — a
+decifragem de assinatura e os identificadores de cliente quebram algumas vezes por ano. O projeto
+exige manutenção contínua. Todo o plano isola essa fragilidade numa única camada trocável.
+
+**Condições de publicação.** O repositório é público (`github.com/Leoccker/YTCL`). O que separa o
+perfil de risco de "um binário na minha máquina" do de "um serviço público" está aqui:
+
+- **Nome sem marca.** O projeto se chama YTCL, não "YouTube Music Client". "YouTube" e "YouTube
+  Music" aparecem só como descrição da finalidade, nunca como nome do produto ou no logo. Isso é a
+  diferença entre uso nominativo justo e violação de trademark — o gancho mais concreto que o
+  Google tem.
+- **Disclaimer de não afiliação** no topo do README e visível no app.
+- **A comunicação não lidera com "sem anúncios".** Contornar anúncio é o que o Google defende
+  comercialmente; é o que atrai carta de advogado. O pitch é "cliente nativo e leve".
+- **Sem monetização.** Doação é tolerada pela prática da comunidade; venda não. O projeto não faz
+  nem uma coisa nem outra.
+- **Sem instância pública, sem serviço de download.** Distribui código-fonte e, na Fase 5,
+  binários — como ferramenta, não como serviço.
+- **Se vier DMCA:** o precedente é o `youtube-dl` (contestado, revertido em ~2 semanas). Plano B é
+  mover para Codeberg ou self-host. Perde-se o histórico de estrelas, não o código.
 
 ---
 
@@ -42,7 +58,7 @@ trocável.
 | 4 — UI completa | — |
 | 5 — Empacotamento | — |
 
-**Fase 0** entregou o workspace Cargo com `ytm-core` e `ytm-player`, o crate
+**Fase 0** entregou o workspace Cargo com `ytcl-core` e `ytcl-player`, o crate
 Tauri com o protocolo `ytmart://`, o frontend Svelte 5 + Vite, a config em TOML
 e o overlay de diagnóstico (F3).
 
@@ -93,7 +109,7 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
  └───────┬──────────────────────────────────────────────────┘
          │
  ┌───────▼──────────────┐   ┌──────────────────────────────┐
- │  ytm-core (tokio)    │   │  ytm-player                  │
+ │  ytcl-core (tokio)    │   │  ytcl-player                  │
  │   ├ InnerTube        │   │   ├ libmpv (vid=no)          │
  │   ├ resolver stream  │◀──┤   ├ fila + histórico         │
  │   ├ auth + keyring   │   │   └ pré-resolução da próxima │
@@ -139,8 +155,8 @@ O plano original dividia isso entre `ytmapi-rs` (metadados) e `rustypipe`
 as duas crates traria uma duplicação real da pilha HTTP, porque pedem versões
 incompatíveis do `reqwest`.
 
-Ele fica atrás das traits `MetadataSource` e `StreamResolver` em `ytm-core`
-(`crates/ytm-core/src/innertube.rs` é o único arquivo que conhece seus tipos):
+Ele fica atrás das traits `MetadataSource` e `StreamResolver` em `ytcl-core`
+(`crates/ytcl-core/src/innertube.rs` é o único arquivo que conhece seus tipos):
 uma quebra da API interna do YouTube tem um lugar só para ser consertada.
 
 **PO token / BotGuard:** as notas do rustypipe indicam que o cliente **YouTube Music envia mas não
@@ -156,7 +172,7 @@ gapless do zero. O libmpv entrega tudo isso testado: gapless, `--cache` em disco
 alimentado pelo `loudnessDb` que o próprio YouTube devolve.
 
 > Nota: **não** usar `tauri-plugin-libmpv` — ele existe para embutir vídeo numa janela e é
-> experimental no Linux. Para áudio, o crate `libmpv2` direto em `ytm-player`, sem saída de vídeo,
+> experimental no Linux. Para áudio, o crate `libmpv2` direto em `ytcl-player`, sem saída de vídeo,
 > é mais simples e totalmente multiplataforma.
 
 **Login — janela de webview nativa do Tauri.** `WebviewWindowBuilder` abre o login normal do
@@ -169,7 +185,7 @@ a API `cookies_for_url` (disponível no Tauri 2 via wry ≥ 0.47) e fechar a jan
   Windows), nunca em arquivo texto.
 
 **Cache — `rusqlite` com feature `bundled`.** Um SQLite guarda faixas, álbuns, artistas, playlists
-e resultados de busca, com TTL por tipo. Capas ficam em `~/.cache/ytmc/art/` nomeadas pelo hash da
+e resultados de busca, com TTL por tipo. Capas ficam em `~/.cache/ytcl/art/` nomeadas pelo hash da
 URL e servidas pelo `ytmart://`. A UI **sempre** lê do cache primeiro e revalida em segundo plano —
 é isso que faz a navegação parecer instantânea.
 
@@ -198,9 +214,9 @@ src-tauri/                # crate do app Tauri
     login_window.rs
   tauri.conf.json
 crates/
-  ytm-core/
+  ytcl-core/
     src/{lib,model,auth,metadata,stream,cache,artwork,config}.rs
-  ytm-player/
+  ytcl-player/
     src/{lib,mpv,queue,state}.rs
 packaging/                # ícones, .desktop, wrapper de lançamento no Linux
 ```
@@ -212,8 +228,8 @@ packaging/                # ícones, .desktop, wrapper de lançamento no Linux
 ### Fase 0 — Fundação
 1. `cargo create-tauri-app` com template Svelte + TS; converter em workspace com `crates/`.
 2. Runtime tokio gerenciado como estado do Tauri (`app.manage(...)`); todo comando é `async`.
-3. `ytm-core/src/config.rs`: diretórios via `directories-next` (`~/.config/ytmc`,
-   `~/.cache/ytmc`), config em TOML.
+3. `ytcl-core/src/config.rs`: diretórios via `directories-next` (`~/.config/ytcl`,
+   `~/.cache/ytcl`), config em TOML.
 4. `src-tauri/src/protocol.rs`: registrar `ytmart://` já nesta fase — servindo um placeholder — pra
    que o padrão esteja estabelecido antes de qualquer tela existir.
 5. Tema em `src/lib/theme.css` com variáveis CSS; sem biblioteca de componentes.
@@ -222,14 +238,14 @@ packaging/                # ícones, .desktop, wrapper de lançamento no Linux
    seguinte, resolve-se antes de continuar.
 
 ### Fase 1 — Metadados e busca
-1. Trait `MetadataSource` em `ytm-core/src/metadata.rs` (`search`, `get_album`, `get_artist`,
+1. Trait `MetadataSource` em `ytcl-core/src/metadata.rs` (`search`, `get_album`, `get_artist`,
    `get_playlist`, `get_library`, `get_liked`) sobre modelos próprios em `model.rs` — não expor os
    tipos do `ytmapi-rs`, para desacoplar.
 2. Implementar `YtmApiSource` com `ytmapi-rs` sem autenticação primeiro (busca pública já funciona
    sem login, o que permite ver a UI viva cedo).
-3. `ytm-core/src/cache.rs`: schema SQLite + migrações, `get_or_fetch` com TTL e revalidação em
+3. `ytcl-core/src/cache.rs`: schema SQLite + migrações, `get_or_fetch` com TTL e revalidação em
    background (stale-while-revalidate).
-4. `ytm-core/src/artwork.rs`: fila de download com `tokio::Semaphore`, gravação em disco, e o
+4. `ytcl-core/src/artwork.rs`: fila de download com `tokio::Semaphore`, gravação em disco, e o
    `ytmart://` servindo com `Cache-Control` longo. O frontend só usa `<img src="ytmart://hash">`.
 5. `views/Search.svelte` + `components/VirtualList.svelte`: virtualização por janela de rolagem
    (renderizar só as linhas visíveis + margem). Comandos paginados.
@@ -237,7 +253,7 @@ packaging/                # ícones, .desktop, wrapper de lançamento no Linux
 ### Fase 2 — Autenticação
 1. `src-tauri/src/login_window.rs`: `WebviewWindowBuilder` com URL de login do Google e UA de
    desktop; listener de navegação; ao chegar em `music.youtube.com`, `cookies_for_url` e fechar.
-2. `ytm-core/src/auth.rs`: validar os cookies com uma chamada autenticada de teste antes de aceitar;
+2. `ytcl-core/src/auth.rs`: validar os cookies com uma chamada autenticada de teste antes de aceitar;
    gravar no keyring com `keyring-rs`, indexado por `account_id`.
 3. Caminho alternativo `import_from_browser()` com `rookie`, filtrando `.youtube.com`.
 4. Renovação: detectar 401/403 nas chamadas, marcar a sessão como expirada e mostrar um banner não
@@ -245,14 +261,14 @@ packaging/                # ícones, .desktop, wrapper de lançamento no Linux
 5. Múltiplas contas com seletor no menu desde já: retrofitar isso depois é caro.
 
 ### Fase 3 — Reprodução
-1. `ytm-player/src/mpv.rs`: libmpv com `vid=no`, `audio-display=no`, `cache=yes`, `cache-secs=120`,
+1. `ytcl-player/src/mpv.rs`: libmpv com `vid=no`, `audio-display=no`, `cache=yes`, `cache-secs=120`,
    `demuxer-max-bytes=64MiB`, `replaygain=track`, `gapless-audio=yes`. Loop de eventos do mpv numa
    thread dedicada, traduzido para `PlayerEvent` e emitido ao frontend (posição a ~4 Hz).
-2. `ytm-core/src/stream.rs`: trait `StreamResolver`; implementação com `rustypipe` escolhendo a
+2. `ytcl-core/src/stream.rs`: trait `StreamResolver`; implementação com `rustypipe` escolhendo a
    melhor trilha só de áudio (Opus 251 → AAC 140), devolvendo URL + expiração + `loudnessDb`.
 3. **Pré-resolução:** faltando ~20 s para o fim, resolver a próxima faixa e passá-la ao mpv com
    `loadfile ... append`. É o que dá gapless real.
-4. `ytm-player/src/queue.rs`: fila com faixa atual, histórico, shuffle (Fisher-Yates com semente
+4. `ytcl-player/src/queue.rs`: fila com faixa atual, histórico, shuffle (Fisher-Yates com semente
    estável) e repeat (off/all/one).
 5. URL expirada: ao detectar erro de rede do mpv, re-resolver e retomar da mesma posição, sem que o
    usuário perceba.
@@ -272,7 +288,7 @@ packaging/                # ícones, .desktop, wrapper de lançamento no Linux
 1. Bundler do próprio Tauri: `.deb`, `.rpm` e AppImage no Linux; MSI e NSIS no Windows.
 2. **libmpv no Windows:** empacotar `libmpv-2.dll` (build do shinchiro) como recurso. **No Linux:**
    declarar dependência do `libmpv` do sistema em `.deb`/`.rpm`, e embutir a `.so` no AppImage.
-3. **Mitigação de gráficos no Linux** (`packaging/ytmc.sh`, usado no `.desktop`): detectar driver
+3. **Mitigação de gráficos no Linux** (`packaging/ytcl.sh`, usado no `.desktop`): detectar driver
    NVIDIA e, só nesse caso, exportar `__NV_DISABLE_EXPLICIT_SYNC=1` e, como último recurso,
    `WEBKIT_DISABLE_DMABUF_RENDERER=1`. Sem essa detecção, uma parte dos usuários NVIDIA abre o app
    e vê uma janela em branco. Em drivers NVIDIA ≥ 560 o workaround deve ser pulado, porque degrada
@@ -297,7 +313,7 @@ O alvo de memória é aferido em **RSS**, que é o número que aparece no monito
 do sistema. O overlay mostra o **PSS** ao lado para diagnóstico: PSS divide
 cada página compartilhada entre os processos que a usam, e a diferença entre os
 dois (390 contra 211 MB na Fase 0) é exatamente o que os três processos —
-`ytmc`, `WebKitWebProcess`, `WebKitNetworkProcess` — compartilham de GTK, libc
+`ytcl`, `WebKitWebProcess`, `WebKitNetworkProcess` — compartilham de GTK, libc
 e do próprio WebKit.
 
 Vale saber de onde vem o piso, porque ele não é código nosso: numa medição do
@@ -328,16 +344,16 @@ acrescenta sobre esse piso é a parte que de fato controlamos.
 | Janela em branco no Linux com NVIDIA (DMABUF do WebKitGTK) | Wrapper de lançamento com detecção de driver (Fase 5.3); documentar as variáveis no README |
 | WebKitGTK mais lento que o Chromium | Svelte sem VDOM, capas fora do IPC, listas virtualizadas, comandos paginados — as três regras da seção de performance |
 | libmpv como dependência nativa | DLL empacotada no Windows, `.so` do sistema com fallback no AppImage; a trait `Player` permite um backend `symphonia`+`cpal` no futuro (limitado a AAC até o Opus ficar pronto) |
-| Zona cinzenta de ToS | Explícito no README; sem distribuição em lojas oficiais; sem monetização |
+| Violação de ToS / trademark do YouTube | Nome sem marca (YTCL), disclaimer de não afiliação, sem monetização, sem instância pública; ver "Condições de publicação" no Context |
 
 ---
 
 ## Verificação
 
 **Testes automatizados**
-- `ytm-core`: parsing contra fixtures JSON gravadas (respostas reais do InnerTube em
+- `ytcl-core`: parsing contra fixtures JSON gravadas (respostas reais do InnerTube em
   `tests/fixtures/`), para a suíte rodar offline e determinística.
-- `ytm-player`: fila (shuffle, repeat, histórico) sem tocar no libmpv, via trait mockada.
+- `ytcl-player`: fila (shuffle, repeat, histórico) sem tocar no libmpv, via trait mockada.
 - `cargo clippy --all-targets -- -D warnings`, `cargo fmt --check`, `svelte-check` no CI.
 
 **Testes de integração (`#[ignore]`, sob demanda e num cron diário)**

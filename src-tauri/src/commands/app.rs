@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use tauri::State;
-use ytm_core::config::Config;
+use ytcl_core::config::Config;
 
 use crate::state::AppState;
 
