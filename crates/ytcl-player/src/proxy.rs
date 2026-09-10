@@ -12,8 +12,6 @@
 //! - a URL, o UA e o tamanho vão codificados na própria URI;
 //! - cada `read` que precisa de dados faz um `block_on` de um GET com Range.
 
-use std::io::Cursor;
-
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
@@ -162,9 +160,7 @@ fn fetch_block(s: &mut Stream, at: u64) -> bool {
 
     match result {
         Ok(bytes) => {
-            let mut cur = Cursor::new(Vec::with_capacity(bytes.len()));
-            std::io::copy(&mut Cursor::new(&bytes[..]), &mut cur).ok();
-            s.buf = cur.into_inner();
+            s.buf = bytes.to_vec();
             s.buf_start = start;
             true
         }

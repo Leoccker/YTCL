@@ -74,7 +74,7 @@ struct YtJson {
 }
 
 fn parse_expire(url: &str) -> u64 {
-    url.split('&')
+    url.split(['?', '&'])
         .find_map(|p| p.strip_prefix("expire="))
         .and_then(|v| v.parse().ok())
         .unwrap_or_else(|| crate::epoch_secs() + 6 * 3600)
@@ -161,5 +161,13 @@ mod tests {
     fn sem_expire_usa_fallback() {
         let e = parse_expire("https://x/videoplayback?foo=1");
         assert!(e > crate::epoch_secs());
+    }
+
+    #[test]
+    fn expire_como_primeiro_parametro() {
+        assert_eq!(
+            parse_expire("https://x/videoplayback?expire=1789088346&bar=2"),
+            1789088346
+        );
     }
 }
