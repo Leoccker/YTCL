@@ -192,6 +192,65 @@ export const libraryArtists = () => invoke<Artist[]>("library_artists");
 export const likedSongs = (continuation?: string) =>
   invoke<Page<Track>>("liked_songs", { continuation });
 
+// --- reprodução -------------------------------------------------------
+
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+export type PlaybackState = "idle" | "buffering" | "playing" | "paused";
+export type RepeatMode = "off" | "all" | "one";
+
+export interface QueueEntry {
+  track: Track;
+  isCurrent: boolean;
+}
+
+export interface PlayerSnapshot {
+  state: PlaybackState;
+  volume: number;
+  position: number;
+  duration: number;
+  repeat: RepeatMode;
+  shuffled: boolean;
+  current: Track | null;
+  queue: QueueEntry[];
+}
+
+export type PlayerEvent =
+  | { event: "state"; state: PlaybackState }
+  | { event: "position"; secs: number; durationSecs: number }
+  | { event: "track_changed"; track: Track }
+  | { event: "queue_changed" }
+  | { event: "volume"; level: number }
+  | { event: "error"; message: string };
+
+export const onPlayerEvent = (cb: (e: PlayerEvent) => void): Promise<UnlistenFn> =>
+  listen<PlayerEvent>("player", (e) => cb(e.payload));
+
+export const playerAvailable = () => invoke<boolean>("player_available");
+export const playerSnapshot = () =>
+  invoke<PlayerSnapshot | null>("player_snapshot");
+
+export const playTracks = (tracks: Track[], start: number) =>
+  invoke<void>("player_play_tracks", { tracks, start });
+export const playerToggle = () => invoke<void>("player_toggle");
+export const playerNext = () => invoke<void>("player_next");
+export const playerPrev = () => invoke<void>("player_prev");
+export const playerSeek = (secs: number) => invoke<void>("player_seek", { secs });
+export const playerSetVolume = (level: number) =>
+  invoke<void>("player_set_volume", { level });
+export const playerSetRepeat = (mode: RepeatMode) =>
+  invoke<void>("player_set_repeat", { mode });
+export const playerSetShuffle = (on: boolean) =>
+  invoke<void>("player_set_shuffle", { on });
+export const playerPlayNext = (track: Track) =>
+  invoke<void>("player_play_next", { track });
+export const playerEnqueue = (track: Track) =>
+  invoke<void>("player_enqueue", { track });
+export const playerMoveQueue = (from: number, to: number) =>
+  invoke<void>("player_move_queue", { from, to });
+export const playerJumpQueue = (orderIndex: number) =>
+  invoke<void>("player_jump_queue", { orderIndex });
+
 // --- capas ---------------------------------------------------------------
 
 /**

@@ -1,6 +1,7 @@
 <script lang="ts">
   import VirtualList from "../components/VirtualList.svelte";
   import ResultRow from "../components/ResultRow.svelte";
+  import { player } from "../stores/player.svelte";
   import {
     search,
     searchMore,
@@ -89,6 +90,13 @@
     }
   }
 
+  function activate(item: SearchItem) {
+    if (item.type !== "track") return; // abrir álbum/artista/playlist é fase 4
+    const tracks = items.filter((i) => i.type === "track");
+    const idx = tracks.findIndex((t) => t.id === item.id);
+    player.play(tracks, Math.max(0, idx));
+  }
+
   function pick(f: SearchFilter) {
     if (f === filter) return;
     filter = f;
@@ -139,7 +147,7 @@
         onEnd={more}
       >
         {#snippet row(item: SearchItem)}
-          <ResultRow {item} />
+          <ResultRow {item} onActivate={activate} />
         {/snippet}
       </VirtualList>
     {:else}

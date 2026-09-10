@@ -5,10 +5,11 @@
 
   interface Props {
     item: SearchItem;
-    onOpen?: (item: SearchItem) => void;
+    /** Faixa: toca. Álbum/artista/playlist: abre (fase 4). */
+    onActivate?: (item: SearchItem) => void;
   }
 
-  let { item, onOpen }: Props = $props();
+  let { item, onActivate }: Props = $props();
 
   function duration(secs: number | null): string {
     if (secs == null) return "";
@@ -46,7 +47,7 @@
   );
 </script>
 
-<button class="row" onclick={() => onOpen?.(item)} title={title}>
+<button class="row" onclick={() => onActivate?.(item)} title={title}>
   <Art art={item.art} size={40} alt="" rounded={item.type === "artist"} />
 
   <span class="text">

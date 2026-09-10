@@ -26,6 +26,7 @@ pub enum RepeatMode {
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum PlayerEvent {
     State { state: PlaybackState },
+    #[serde(rename_all = "camelCase")]
     Position { secs: f64, duration_secs: f64 },
     TrackChanged { track: Box<Track> },
     QueueChanged,

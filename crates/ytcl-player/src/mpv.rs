@@ -43,6 +43,16 @@ pub struct MpvBackend {
 
 impl MpvBackend {
     pub fn new(events: mpsc::UnboundedSender<BackendEvent>) -> anyhow::Result<Self> {
+        // libmpv se recusa a inicializar (mpv_create devolve NULL) se o
+        // LC_NUMERIC do processo não for "C" — e o GTK, que o Tauri inicia
+        // antes, adota o locale do usuário (pt_BR usa vírgula decimal). Fixar
+        // só o LC_NUMERIC logo antes de criar o mpv é o remédio documentado;
+        // não afeta formatação de data/moeda.
+        #[cfg(unix)]
+        unsafe {
+            libc::setlocale(libc::LC_NUMERIC, c"C".as_ptr());
+        }
+
         let mpv = Mpv::with_initializer(|init| {
             // Sem vídeo: nada de decodificar frames nem abrir janela.
             init.set_property("vid", "no")?;
@@ -139,7 +149,9 @@ impl Backend for MpvBackend {
 /// Loop da thread de eventos. Sai quando o mpv desliga (o `MpvBackend` foi
 /// dropado e o último handle sumiu).
 fn event_loop(mpv: &Mpv, tx: mpsc::UnboundedSender<BackendEvent>) {
-    let client = match mpv.create_client(Some("ytcl-events")) {
+    let client = // create_client(Some(name)) tem um use-after-free no libmpv2 6.0.0
+    // (CString temporária). O nome é cosmético e nem é lido — usamos None.
+    match mpv.create_client(None) {
         Ok(c) => c,
         Err(e) => {
             tracing::error!("cliente de eventos do mpv: {e}");

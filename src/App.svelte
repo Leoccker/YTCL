@@ -5,6 +5,8 @@
   import Search from "./lib/views/Search.svelte";
   import Library from "./lib/views/Library.svelte";
   import { auth } from "./lib/stores/auth.svelte";
+  import { player } from "./lib/stores/player.svelte";
+  import PlayerBar from "./lib/components/PlayerBar.svelte";
 
   type Route = "home" | "search" | "library";
 
@@ -18,6 +20,7 @@
 
   onMount(() => {
     void auth.refresh();
+    void player.init();
   });
 
   function onKey(e: KeyboardEvent) {
@@ -85,7 +88,7 @@
   </main>
 
   <footer class="player">
-    <span class="dim">a barra do player entra na fase 3</span>
+    <PlayerBar />
   </footer>
 </div>
 
@@ -193,12 +196,5 @@
     grid-area: player;
     background: var(--bg-elevated);
     border-top: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    padding: 0 var(--space-4);
-  }
-
-  .dim {
-    color: var(--text-dim);
   }
 </style>

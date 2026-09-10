@@ -96,14 +96,14 @@ pub fn run() {
             commands::player_available,
         ])
         .setup(move |app| {
-            // O player precisa do runtime tokio ativo (usa tokio::spawn), por
-            // isso nasce aqui e nao em AppState::new. A ponte reencaminha
-            // cada PlayerEvent como evento Tauri "player".
+            // O player usa tokio::spawn, entao precisa nascer DENTRO de uma
+            // task do runtime (o setup() roda fora do contexto do reactor).
+            // A ponte reencaminha cada PlayerEvent como evento Tauri "player".
             let app_handle = app.handle().clone();
-            let (to_ui, mut from_player) = tokio::sync::mpsc::unbounded_channel();
-            setup_state.init_player(to_ui);
             tauri::async_runtime::spawn(async move {
                 use tauri::Emitter;
+                let (to_ui, mut from_player) = tokio::sync::mpsc::unbounded_channel();
+                setup_state.init_player(to_ui);
                 while let Some(ev) = from_player.recv().await {
                     let _ = app_handle.emit("player", ev);
                 }

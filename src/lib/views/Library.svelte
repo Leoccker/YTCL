@@ -4,6 +4,7 @@
   import VirtualList from "../components/VirtualList.svelte";
   import ResultRow from "../components/ResultRow.svelte";
   import { auth } from "../stores/auth.svelte";
+  import { player } from "../stores/player.svelte";
   import {
     libraryPlaylists,
     libraryAlbums,
@@ -195,8 +196,11 @@
       {:else if tab === "liked"}
         {#if liked.length}
           <VirtualList items={liked} itemHeight={56} onEnd={moreLiked}>
-            {#snippet row(t: Track)}
-              <ResultRow item={{ type: "track", ...t }} />
+            {#snippet row(t: Track, i: number)}
+              <ResultRow
+                item={{ type: "track", ...t }}
+                onActivate={() => player.play(liked, i)}
+              />
             {/snippet}
           </VirtualList>
         {:else}
