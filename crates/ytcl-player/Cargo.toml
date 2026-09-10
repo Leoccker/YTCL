@@ -14,3 +14,4 @@ tokio.workspace = true
 tracing.workspace = true
 parking_lot.workspace = true
 async-trait = "0.1"
+libmpv2 = "6.0.0"

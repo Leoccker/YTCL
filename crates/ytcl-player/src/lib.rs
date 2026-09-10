@@ -4,8 +4,10 @@
 //! sem audio nenhum, e para deixar a porta aberta a um backend alternativo
 //! (`symphonia` + `cpal`) se um dia o libmpv virar um problema.
 
+pub mod mpv;
 pub mod state;
 
+pub use mpv::{BackendEvent, MpvBackend};
 pub use state::{PlaybackState, PlayerEvent, RepeatMode};
 
 use async_trait::async_trait;
