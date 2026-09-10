@@ -54,8 +54,8 @@ perfil de risco de "um binário na minha máquina" do de "um serviço público" 
 | 0 — Fundação | **concluída** (2026-09-09) |
 | 1 — Metadados e busca | **concluída** (2026-09-09) |
 | 2 — Autenticação | **concluída** (2026-09-10) |
-| 3 — Reprodução | próxima |
-| 4 — UI completa | — |
+| 3 — Reprodução | **concluída** (2026-09-10) |
+| 4 — UI completa | próxima |
 | 5 — Empacotamento | — |
 
 **Fase 0** entregou o workspace Cargo com `ytcl-core` e `ytcl-player`, o crate
@@ -71,6 +71,11 @@ keyring do SO), a janela de login do Google (`src-tauri/src/login_window.rs`), a
 re-hidratação da sessão no boot, os comandos de biblioteca e a tela de
 biblioteca com abas (playlists, álbuns, artistas, curtidas) mais o banner de
 reconexão.
+
+**Fase 3** entregou o resolvedor de stream (Opus 251 → AAC 140, descarta DRM), o
+backend de áudio com libmpv em modo só-áudio, a fila (shuffle determinístico,
+repeat), o orquestrador `Player` (gapless por pré-resolução, recuperação de URL
+expirada) e a barra do player.
 
 ### Correções de rota
 
@@ -106,6 +111,14 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
   `CacheStorage` que remove esses dois campos antes de gravar — o resto do cache
   (versões de cliente, JS de decifragem) continua em disco, e a sessão é
   re-injetada do keyring a cada abertura. *(Fase 2)*
+- **`libmpv2` 6.0.0 tem um use-after-free em `create_client(Some(name))`** —
+  `CString::new(name)?.as_ptr()` num temporário liberado na mesma expressão,
+  o que dava segfault dentro de `mpv_observe_property`. `create_client(None)`
+  não passa por esse caminho e o nome do cliente é só cosmético. *(Fase 3)*
+- **libmpv se recusa a iniciar com `LC_NUMERIC` != `"C"`** (`mpv_create` devolve
+  NULL). O GTK, que o Tauri inicia antes, adota o locale do usuário. Solução:
+  `setlocale(LC_NUMERIC, "C")` logo antes de `mpv_create`, guardado em
+  `#[cfg(unix)]`. É o remédio documentado pelo mpv; não afeta data/moeda. *(Fase 3)*
 - **Stale-while-revalidate sem eventos.** Em vez de emitir um evento quando a
   revalidação termina, os comandos devolvem `{ data, stale }` e o frontend
   repete a chamada com `refresh: true`. Menos peças móveis, mesmo efeito.
