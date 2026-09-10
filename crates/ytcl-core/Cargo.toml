@@ -20,6 +20,8 @@ toml = "0.9"
 rustypipe = { version = "0.11.4", default-features = false, features = ["rustls-tls-webpki-roots", "userdata"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots"] }
+uuid = { version = "1.20.0", features = ["v4"] }
+keyring = "4"
 
 [dev-dependencies]
 
