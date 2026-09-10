@@ -163,3 +163,37 @@ async fn biblioteca_sem_login_reclama_de_autenticacao() {
         "sem cookie, a biblioteca deveria pedir login, deu {res:?}"
     );
 }
+
+#[tokio::test]
+#[ignore = "precisa de conta conectada no cofre do SO"]
+async fn library_playlists_pagina_ate_o_fim_sem_quebrar() {
+    use ytcl_core::auth::{AuthStore, KeyringStore};
+
+    let store = KeyringStore;
+    let auth = AuthStore::new(&store);
+    let Some(acc) = auth.accounts().unwrap_or_default().into_iter().next() else {
+        eprintln!("sem conta no cofre — pulando");
+        return;
+    };
+    let cookie = auth
+        .cookie(&acc.id)
+        .expect("ler cookie")
+        .expect("conta sem cookie");
+
+    let it = client();
+    it.set_cookie(&cookie).await.expect("cookie deveria estar válido");
+
+    // Antes do patch no rustypipe (`#[serde(default)]` em `GridRenderer.items`)
+    // isto dava `missing field \`items\`` ao paginar até a página-marcador de
+    // fim — um `gridContinuation` que o YouTube manda sem o campo `items`.
+    let playlists = it
+        .library_playlists()
+        .await
+        .expect("library_playlists não deveria falhar na paginação");
+
+    assert!(!playlists.is_empty(), "biblioteca sem playlists?");
+    for p in &playlists {
+        assert!(!p.id.is_empty(), "playlist sem id");
+        assert!(!p.title.is_empty(), "playlist sem título");
+    }
+}

@@ -115,14 +115,16 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
 
 ## Problemas conhecidos
 
-- **`music_saved_playlists` do rustypipe está quebrado.** A aba de Playlists da
-  biblioteca dá `missing field items` — o YouTube mudou o formato da resposta
-  do feed `FEmusic_liked_playlists` depois de abril de 2025 e o rustypipe
-  0.11.4 (última versão, e o HEAD do repositório dele também) não acompanhou.
-  As outras três rotas de biblioteca — álbuns, artistas, curtidas — funcionam
-  (`cargo run -p ytcl-core --example library` confirma). A UI isola o erro
-  nessa aba, com botão de repetir. Conserto: reimplementar a rota em
-  `innertube.rs` chamando o browse do InnerTube direto, ou esperar o upstream.
+- **rustypipe patchado por um fork.** O `rustypipe 0.11.4` falha ao ler o
+  `gridContinuation` vazio que o YouTube manda no fim do feed de playlists da
+  biblioteca (`FEmusic_liked_playlists`): o campo `items` vem ausente e o struct
+  `GridRenderer` o exige, gerando `missing field items`. O `[patch.crates-io]`
+  na raiz aponta para `codeberg.org/Leoccker/rustypipe`, que adiciona
+  `#[serde(default)]` a esse campo — uma linha, a mesma coisa que o campo
+  `continuations` logo abaixo já tem. Verificado: as quatro rotas de biblioteca
+  passam (`cargo run -p ytcl-core --example library`), teste de regressão em
+  `innertube_live.rs::library_playlists_pagina_ate_o_fim_sem_quebrar`.
+  **Remover o patch quando o upstream publicar a correção.**
 
 ## Arquitetura
 
