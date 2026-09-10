@@ -31,6 +31,34 @@ trocável.
 
 ---
 
+## Estado
+
+| Fase | Estado |
+|---|---|
+| 0 — Fundação | **concluída** (2026-09-09) |
+| 1 — Metadados e busca | próxima |
+| 2 — Autenticação | — |
+| 3 — Reprodução | — |
+| 4 — UI completa | — |
+| 5 — Empacotamento | — |
+
+O que a Fase 0 entregou: workspace Cargo com `ytm-core` e `ytm-player`, o crate
+Tauri com o protocolo `ytmart://` funcionando, frontend Svelte 5 + Vite, config
+em TOML e o overlay de diagnóstico (F3). App compila e roda em Linux; 7 testes,
+clippy e `svelte-check` limpos; binário de release com 5,3 MB.
+
+Duas correções de rota que a fase produziu, ambas registradas nas seções abaixo:
+
+- O medidor de memória somava RSS da árvore de processos, contando as bibliotecas
+  compartilhadas uma vez por processo. Passou a medir PSS, com RSS ao lado.
+- O alvo de memória de 200 MB era estimativa por analogia, não medição. Com o
+  piso do WebKitGTK medido nesta máquina, passou para 500 MB de RSS.
+
+Pendência conhecida para a Fase 1: verificar com `cargo tree` se `ytmapi-rs` e
+`rustypipe` convergem na mesma versão do `reqwest`. Se não convergirem, o cargo
+compila duas pilhas HTTP inteiras — vale alinhar antes de escolher as features.
+
+
 ## Arquitetura
 
 ```

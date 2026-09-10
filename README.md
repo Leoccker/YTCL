@@ -11,9 +11,11 @@ sistema, o núcleo é Rust e o áudio passa pelo libmpv.
 
 ## Estado
 
-Fase 0 (fundação) concluída: workspace, IPC, protocolo `ytmart://`, config,
-overlay de diagnóstico. Ainda não busca nem toca nada — ver o plano em
-`docs/plano.md`.
+Fase 0 (fundação) concluída: workspace, IPC, protocolo `ytmart://`, config e
+overlay de diagnóstico. Ainda não busca nem toca nada.
+
+O plano completo — arquitetura, fases, alvos de performance, riscos — está em
+**[`docs/plano.md`](docs/plano.md)**, com o estado de cada fase no topo.
 
 ## Dependências do sistema
 
