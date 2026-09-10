@@ -37,6 +37,42 @@ impl ResolvedStream {
     }
 }
 
+/// Uma trilha de áudio candidata — o mínimo que a escolha precisa saber.
+/// O adaptador do rustypipe converte `AudioStream` para isto.
+#[derive(Debug, Clone)]
+pub struct AudioTrack {
+    pub url: String,
+    pub itag: u32,
+    pub codec: AudioCodec,
+    pub bitrate: u32,
+    pub loudness_db: Option<f64>,
+    /// Trilha com DRM não toca — o resolvedor descarta antes de chegar aqui,
+    /// mas o campo existe para o teste cobrir o caso.
+    pub has_drm: bool,
+}
+
+/// Escolhe a melhor trilha só de áudio.
+///
+/// Regra: descarta DRM; se `prefer_opus`, tenta Opus e só cai para AAC se não
+/// houver Opus; dentro do codec escolhido, pega o maior bitrate. Sem
+/// `prefer_opus`, escolhe o maior bitrate entre todos.
+///
+/// Por que Opus primeiro: o itag 251 do YouTube Music é a melhor qualidade
+/// disponível e o libmpv decodifica nativamente. AAC (itag 140) é o piso.
+pub fn pick_track(tracks: &[AudioTrack], prefer_opus: bool) -> Option<&AudioTrack> {
+    let playable = || tracks.iter().filter(|t| !t.has_drm);
+
+    if prefer_opus {
+        if let Some(best_opus) = playable()
+            .filter(|t| t.codec == AudioCodec::Opus)
+            .max_by_key(|t| t.bitrate)
+        {
+            return Some(best_opus);
+        }
+    }
+    playable().max_by_key(|t| t.bitrate)
+}
+
 #[async_trait]
 pub trait StreamResolver: Send + Sync + 'static {
     async fn resolve(&self, video_id: &str) -> Result<ResolvedStream>;
@@ -63,6 +99,62 @@ mod tests {
             loudness_db: None,
             duration_secs: Some(200),
         }
+    }
+
+fn track(itag: u32, codec: AudioCodec, bitrate: u32, drm: bool) -> AudioTrack {
+        AudioTrack {
+            url: format!("https://example.com/{itag}"),
+            itag,
+            codec,
+            bitrate,
+            loudness_db: None,
+            has_drm: drm,
+        }
+    }
+
+    #[test]
+    fn prefere_opus_mesmo_com_aac_de_bitrate_maior() {
+        let tracks = [
+            track(140, AudioCodec::Aac, 256_000, false),
+            track(251, AudioCodec::Opus, 160_000, false),
+        ];
+        let chosen = pick_track(&tracks, true).unwrap();
+        assert_eq!(chosen.itag, 251);
+    }
+
+    #[test]
+    fn sem_opus_cai_para_aac() {
+        let tracks = [track(140, AudioCodec::Aac, 128_000, false)];
+        assert_eq!(pick_track(&tracks, true).unwrap().itag, 140);
+    }
+
+    #[test]
+    fn sem_prefer_opus_pega_o_maior_bitrate() {
+        let tracks = [
+            track(140, AudioCodec::Aac, 256_000, false),
+            track(251, AudioCodec::Opus, 160_000, false),
+        ];
+        assert_eq!(pick_track(&tracks, false).unwrap().itag, 140);
+    }
+
+    #[test]
+    fn descarta_drm() {
+        let tracks = [
+            track(251, AudioCodec::Opus, 320_000, true),
+            track(140, AudioCodec::Aac, 128_000, false),
+        ];
+        assert_eq!(pick_track(&tracks, true).unwrap().itag, 140);
+    }
+
+    #[test]
+    fn tudo_drm_nao_devolve_nada() {
+        let tracks = [track(251, AudioCodec::Opus, 320_000, true)];
+        assert!(pick_track(&tracks, true).is_none());
+    }
+
+    #[test]
+    fn lista_vazia_nao_devolve_nada() {
+        assert!(pick_track(&[], true).is_none());
     }
 
     #[test]

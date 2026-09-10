@@ -19,6 +19,9 @@ use serde::Serialize;
 
 use crate::error::{CoreError, Result};
 use crate::metadata::MetadataSource;
+use crate::stream::{
+    AudioCodec as StreamCodec, AudioTrack, ResolvedStream, StreamResolver,
+};
 use crate::model::{
     Album, AlbumRef, ArtRef, Artist, ArtistRef, Page, Playlist, SearchFilter, SearchItem, Track,
 };
@@ -501,6 +504,55 @@ impl MetadataSource for InnerTube {
         Ok(Page {
             items: items.into_iter().map(track_from).collect(),
             continuation: next,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Resolução de stream
+// ---------------------------------------------------------------------------
+
+#[async_trait]
+impl StreamResolver for InnerTube {
+    async fn resolve(&self, video_id: &str) -> Result<ResolvedStream> {
+        // Sem botguard, o `player()` do rustypipe usa os clientes iOS e TV,
+        // que não exigem PO token. Roda sem autenticação — faixa pública
+        // resolve sem cookie.
+        let player = self
+            .rp
+            .query()
+            .player(video_id)
+            .await
+            .map_err(map_err)?;
+
+        let tracks: Vec<AudioTrack> = player
+            .audio_streams
+            .iter()
+            .map(|a| AudioTrack {
+                url: a.url.clone(),
+                itag: a.itag,
+                codec: match a.codec {
+                    rustypipe::model::AudioCodec::Opus => StreamCodec::Opus,
+                    _ => StreamCodec::Aac,
+                },
+                bitrate: a.average_bitrate.max(a.bitrate),
+                loudness_db: a.loudness_db.map(f64::from),
+                has_drm: !a.drm_systems.is_empty(),
+            })
+            .collect();
+
+        let prefer_opus = true; // a UI passa a preferência via config na camada de cima
+        let chosen = crate::stream::pick_track(&tracks, prefer_opus).ok_or_else(|| {
+            CoreError::Other("nenhuma trilha de áudio tocável (só DRM?)".into())
+        })?;
+
+        Ok(ResolvedStream {
+            url: chosen.url.clone(),
+            codec: chosen.codec,
+            bitrate: chosen.bitrate,
+            expires_at: player.valid_until.unix_timestamp().max(0) as u64,
+            loudness_db: chosen.loudness_db,
+            duration_secs: Some(player.details.duration).filter(|d| *d > 0),
         })
     }
 }

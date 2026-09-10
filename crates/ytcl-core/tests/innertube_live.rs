@@ -197,3 +197,32 @@ async fn library_playlists_pagina_ate_o_fim_sem_quebrar() {
         assert!(!p.title.is_empty(), "playlist sem título");
     }
 }
+
+// --- resolução de stream ------------------------------------------------
+
+#[tokio::test]
+#[ignore = "precisa de rede"]
+async fn resolve_stream_devolve_url_de_audio_valida() {
+    use ytcl_core::stream::{AudioCodec, StreamResolver};
+
+    let it = client();
+    // "Never Gonna Give You Up" — público, sempre disponível.
+    let stream = it.resolve("dQw4w9WgXcQ").await.expect("resolver falhou");
+
+    assert!(stream.url.starts_with("https://"), "URL suspeita: {}", stream.url);
+    assert!(stream.bitrate > 0);
+    assert!(stream.duration_secs.unwrap_or(0) > 60);
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    assert!(
+        stream.is_fresh(now, 60),
+        "URL já vem expirada (expires_at={}, now={now})",
+        stream.expires_at
+    );
+
+    // Deve preferir Opus para uma faixa que tem as duas trilhas.
+    assert_eq!(stream.codec, AudioCodec::Opus, "esperava Opus, veio {:?}", stream.codec);
+}
