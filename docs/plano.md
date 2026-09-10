@@ -231,16 +231,25 @@ packaging/                # ícones, .desktop, wrapper de lançamento no Linux
 
 ## Alvos de performance (critério de aceite, não aspiração)
 
-| Métrica | Alvo |
-|---|---|
-| Janela visível a partir do clique | < 1 s |
-| Rolagem de listas e grades | 60 fps sustentados |
-| Clique em "tocar" → primeiro som (cache quente) | < 800 ms |
-| RSS em idle, biblioteca carregada | < 200 MB |
-| Tamanho do instalador | < 30 MB sem contar a libmpv |
+| Métrica | Alvo | Medido na Fase 0 |
+|---|---|---|
+| Janela visível a partir do clique | < 1 s | a instrumentar |
+| Rolagem de listas e grades | 60 fps sustentados | a medir sob carga |
+| Clique em "tocar" → primeiro som (cache quente) | < 800 ms | — |
+| Memória (RSS da árvore de processos) | **< 500 MB** | 390 MB (tela vazia) |
+| Tamanho do instalador | < 30 MB sem contar a libmpv | binário: 5,3 MB |
 
-Para referência: Electron equivalente fica em 150–300 MB de RSS e 100+ MB de instalador.
+O alvo de memória é aferido em **RSS**, que é o número que aparece no monitor
+do sistema. O overlay mostra o **PSS** ao lado para diagnóstico: PSS divide
+cada página compartilhada entre os processos que a usam, e a diferença entre os
+dois (390 contra 211 MB na Fase 0) é exatamente o que os três processos —
+`ytmc`, `WebKitWebProcess`, `WebKitNetworkProcess` — compartilham de GTK, libc
+e do próprio WebKit.
 
+Vale saber de onde vem o piso, porque ele não é código nosso: numa medição do
+build de release com a tela vazia, o binário do app respondia por 3,6 MB do
+total. O resto é WebKitGTK, GTK e a stack gráfica do Mesa. O que cada fase
+acrescenta sobre esse piso é a parte que de fato controlamos.
 ---
 
 ## Fora do v1 (roadmap)

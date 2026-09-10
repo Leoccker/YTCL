@@ -59,8 +59,11 @@
   });
 
   const fpsColor = $derived(fps >= 55 ? "ok" : fps >= 40 ? "warn" : "bad");
+  // Alvo do projeto: RSS < 500 MB. RSS e o numero que aparece no monitor do
+  // sistema, entao e o que vale como criterio; o PSS fica do lado para
+  // diagnosticar (a diferenca e o que os 3 processos compartilham).
   const memColor = $derived(
-    !mem?.pssMb ? "dim" : mem.pssMb < 200 ? "ok" : mem.pssMb < 300 ? "warn" : "bad",
+    !mem?.rssMb ? "dim" : mem.rssMb < 500 ? "ok" : mem.rssMb < 650 ? "warn" : "bad",
   );
 </script>
 
@@ -75,14 +78,14 @@
       <span class={worstFrameMs > 16.7 ? "warn" : "ok"}>{worstFrameMs.toFixed(1)}ms</span>
     </div>
     <div class="row">
-      <span class="label">pss</span>
+      <span class="label">rss</span>
       <span class={memColor}>
-        {mem?.pssMb ? `${mem.pssMb.toFixed(0)}MB` : "—"}
+        {mem?.rssMb ? `${mem.rssMb.toFixed(0)}MB` : "—"}
       </span>
     </div>
     <div class="row">
-      <span class="label">rss</span>
-      <span class="dim">{mem?.rssMb ? `${mem.rssMb.toFixed(0)}MB` : "—"}</span>
+      <span class="label">pss</span>
+      <span class="dim">{mem?.pssMb ? `${mem.pssMb.toFixed(0)}MB` : "—"}</span>
     </div>
     <div class="row">
       <span class="label">procs</span>

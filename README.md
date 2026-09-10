@@ -44,9 +44,18 @@ npm install
 npm run tauri dev
 ```
 
-`F3` abre o overlay de performance: fps, pior frame do último segundo e RSS da
-árvore de processos (no Linux o WebKitGTK roda em processos separados, então
-somar a árvore é a única medida honesta).
+`F3` abre o overlay de performance: fps, pior frame do último segundo e memória
+da árvore de processos. No Linux o WebKitGTK roda em processos separados
+(`ytmc`, `WebKitWebProcess`, `WebKitNetworkProcess`), então medir só o processo
+principal esconderia a maior parte.
+
+O overlay mostra dois números de memória. **RSS** é o critério de aceite
+(alvo: < 500 MB) porque é o que o monitor do sistema mostra. **PSS** fica ao
+lado para diagnóstico: divide cada página compartilhada entre os processos que
+a usam. Na Fase 0, com a tela vazia, o release media 390 MB de RSS contra
+211 MB de PSS — a diferença é o GTK, a libc e o WebKit que os três processos
+compartilham. Desse total, o binário do app respondia por 3,6 MB; o resto é
+piso do toolkit.
 
 ## Verificação
 
