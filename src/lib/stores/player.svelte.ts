@@ -23,6 +23,7 @@ import {
   playerJumpQueue,
   errorMessage,
   type PlaybackState,
+  type PlayerEvent,
   type QueueEntry,
   type RepeatMode,
   type Track,
@@ -40,6 +41,9 @@ class PlayerState {
   shuffled = $state(false);
   queue = $state<QueueEntry[]>([]);
   error = $state<string | null>(null);
+  #initialized = false;
+  /** Eventos vencem snapshots que ja estavam em voo. */
+  #eventVersion = 0;
 
   /** Timestamp (ms) do último evento de posição — base da interpolação. */
   #posAt = 0;
@@ -55,9 +59,29 @@ class PlayerState {
   }
 
   async init() {
-    this.available = await playerAvailable().catch(() => false);
+    if (this.#initialized) return;
+    this.#initialized = true;
 
+    // Instala o listener antes do snapshot: se o mpv terminar de iniciar no
+    // meio, o evento "ready" refaz a leitura em vez de a UI ficar indisponivel.
+    await onPlayerEvent((e) => {
+      if (e.event === "ready") {
+        this.#eventVersion++;
+        void this.refreshSnapshot();
+        return;
+      }
+      this.applyEvent(e);
+    });
+
+    await this.refreshSnapshot();
+  }
+
+  private async refreshSnapshot() {
+    const eventVersion = this.#eventVersion;
+    const available = await playerAvailable().catch(() => false);
     const snap = await playerSnapshot().catch(() => null);
+    if (eventVersion !== this.#eventVersion) return;
+    this.available = available;
     if (snap) {
       this.playbackState = snap.state;
       this.current = snap.current;
@@ -69,9 +93,11 @@ class PlayerState {
       this.queue = snap.queue;
       this.#posAt = performance.now();
     }
+  }
 
-    await onPlayerEvent((e) => {
-      switch (e.event) {
+  private applyEvent(e: Exclude<PlayerEvent, { event: "ready" }>) {
+    this.#eventVersion++;
+    switch (e.event) {
         case "state":
           this.playbackState = e.state;
           break;
@@ -96,7 +122,6 @@ class PlayerState {
           this.error = e.message;
           break;
       }
-    });
   }
 
   private async refreshQueue() {

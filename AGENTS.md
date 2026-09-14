@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 Orientação para agentes trabalhando neste repositório.
 
@@ -119,9 +119,9 @@ oficial está em `docs/plano.md > Problemas conhecidos`.
 
 - Branch de trabalho: `dev`. Fluxo: `dev` → PR → `main` no GitHub
   (`github.com/Leoccker/YTCL`).
-- Há uma GitHub Action (`.github/workflows/claude.yml`) que roda o Claude Code
-  Action em issues/PRs quando alguém menciona `@claude`.
-- **Não** adicionar `Co-Authored-By: Claude` nem `Claude-Session:` nos commits.
+- Há uma GitHub Action (`.github/workflows/Codex.yml`) que roda o Codex
+  Action em issues/PRs quando alguém menciona `@Codex`.
+- **Não** adicionar `Co-Authored-By: Codex` nem `Codex-Session:` nos commits.
 - Autor: `Leoccker <leodrive013@gmail.com>` (identidade do `~/.gitconfig`).
 - Mensagens de commit em português, explicando o "porquê".
 

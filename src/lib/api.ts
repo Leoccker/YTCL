@@ -162,6 +162,10 @@ export interface AuthStatus {
 
 export const authStatus = () => invoke<AuthStatus>("auth_status");
 
+/** Mudancas assíncronas da sessão (por exemplo, a hidratação no boot). */
+export const onAuthSession = (cb: (session: Session) => void): Promise<UnlistenFn> =>
+  listen<Session>("auth-session", (e) => cb(e.payload));
+
 /** Abre a janela de login do Google. Resolve quando a conta é conectada. */
 export const authLoginGoogle = () => invoke<Account>("auth_login_google");
 
@@ -216,6 +220,7 @@ export interface PlayerSnapshot {
 }
 
 export type PlayerEvent =
+  | { event: "ready" }
   | { event: "state"; state: PlaybackState }
   | { event: "position"; secs: number; durationSecs: number }
   | { event: "track_changed"; track: Track }

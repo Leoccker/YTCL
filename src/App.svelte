@@ -19,7 +19,7 @@
   let current = $state<Route>("search");
 
   onMount(() => {
-    void auth.refresh();
+    void auth.init();
     void player.init();
   });
 
