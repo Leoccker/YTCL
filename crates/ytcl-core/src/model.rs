@@ -88,6 +88,18 @@ pub enum SearchItem {
     Playlist(Playlist),
 }
 
+/// Uma prateleira da tela Início ("Novos lançamentos", "Em alta"...).
+///
+/// O YouTube Music não expõe feed personalizado pelo rustypipe, entao a tela
+/// Início mostra secoes publicas fixas. `items` reusa `SearchItem` para o
+/// frontend nao precisar de um segundo tipo de card.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeSection {
+    pub title: String,
+    pub items: Vec<SearchItem>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchFilter {

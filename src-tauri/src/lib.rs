@@ -54,6 +54,7 @@ pub fn run() {
             commands::get_config,
             commands::set_config,
             commands::mem_info,
+            commands::home,
             commands::search,
             commands::search_more,
             commands::album,

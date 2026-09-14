@@ -7,11 +7,15 @@
 use async_trait::async_trait;
 
 use crate::error::Result;
-use crate::model::{Album, Artist, Page, Playlist, SearchFilter, SearchItem, Track};
+use crate::model::{Album, Artist, HomeSection, Page, Playlist, SearchFilter, SearchItem, Track};
 
 #[async_trait]
 pub trait MetadataSource: Send + Sync + 'static {
     async fn search(&self, query: &str, filter: SearchFilter) -> Result<Page<SearchItem>>;
+
+    /// Prateleiras publicas da tela Início: novos lancamentos, paradas etc.
+    /// Sem feed personalizado, e o que da para mostrar sem sessao.
+    async fn home(&self) -> Result<Vec<HomeSection>>;
 
     /// Continua uma busca ou listagem a partir do token opaco devolvido antes.
     async fn search_more(&self, continuation: &str) -> Result<Page<SearchItem>>;

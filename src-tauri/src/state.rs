@@ -19,6 +19,9 @@ const ART_CONCURRENCY: usize = 8;
 /// YouTube muda; album e artista sao praticamente estaticos.
 pub const TTL_SEARCH: Duration = Duration::from_secs(15 * 60);
 pub const TTL_DETAIL: Duration = Duration::from_secs(24 * 60 * 60);
+/// A Início muda pouco ao longo do dia (novos lancamentos, paradas), mas nao
+/// e estatica como album/artista — uma hora equilibra os dois.
+pub const TTL_HOME: Duration = Duration::from_secs(60 * 60);
 
 /// Situacao da sessao, do ponto de vista da UI.
 #[derive(Debug, Clone, Serialize)]
