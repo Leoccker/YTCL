@@ -14,6 +14,7 @@ use rustypipe::model::paginator::Paginator;
 use rustypipe::model::{
     AlbumItem, ArtistItem, MusicItem, MusicPlaylistItem, Thumbnail, TrackItem,
 };
+use rustypipe::report::FileReporter;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -55,6 +56,14 @@ impl InnerTube {
         let storage = ScrubbedStorage::new(cache_dir.join("rustypipe_cache.json"));
         let rp = RustyPipe::builder()
             .storage(Box::new(storage))
+            // O padrao do rustypipe grava relatorios de erro em
+            // `./rustypipe_reports`, relativo ao diretorio atual: rodando os
+            // testes de dentro de `crates/*` isso ja vazou dumps para o
+            // repositorio. Na pasta de cache o diagnostico continua disponivel
+            // sem nunca cair na arvore do git.
+            .reporter(Box::new(FileReporter::new(
+                cache_dir.join("rustypipe_reports"),
+            )))
             .build()
             .map_err(|e| CoreError::Other(format!("iniciando o cliente InnerTube: {e}")))?;
         Ok(Self { rp })
