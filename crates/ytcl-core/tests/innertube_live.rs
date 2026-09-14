@@ -108,6 +108,29 @@ async fn album_traz_as_faixas_e_a_capa() {
     assert!(detail.art.is_some(), "album sem capa");
 }
 
+#[tokio::test]
+#[ignore = "precisa de rede"]
+async fn home_traz_prateleiras_com_itens_validos() {
+    let it = client();
+    let sections = it.home().await.expect("home falhou");
+
+    assert!(!sections.is_empty(), "Início sem nenhuma prateleira");
+
+    let com_itens = sections.iter().filter(|s| !s.items.is_empty()).count();
+    assert!(com_itens > 0, "nenhuma prateleira com itens");
+
+    for s in &sections {
+        assert!(!s.title.is_empty(), "prateleira sem titulo");
+
+        for item in &s.items {
+            if let SearchItem::Track(t) = item {
+                assert!(!t.id.is_empty(), "faixa da Início sem videoId");
+                assert!(!t.title.is_empty(), "faixa da Início sem titulo");
+            }
+        }
+    }
+}
+
 fn id_of(item: &SearchItem) -> Option<&str> {
     match item {
         SearchItem::Track(t) => Some(&t.id),

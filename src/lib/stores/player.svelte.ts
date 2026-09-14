@@ -152,6 +152,17 @@ class PlayerState {
     this.#lastPlayId = id;
     this.guard(playTracks(tracks, start));
   }
+  /**
+   * "Aleatório" das telas de detalhe. A fila do backend só embaralha o que
+   * vem depois da faixa atual, então começar sempre da primeira deixaria a
+   * faixa 1 fixa em todo aleatório — sorteamos o ponto de partida.
+   */
+  playShuffled(tracks: Track[]) {
+    if (tracks.length === 0) return;
+    if (!this.shuffled) this.toggleShuffle();
+    this.play(tracks, Math.floor(Math.random() * tracks.length));
+  }
+
   toggle() {
     this.guard(playerToggle());
   }

@@ -55,8 +55,8 @@ perfil de risco de "um binário na minha máquina" do de "um serviço público" 
 | 1 — Metadados e busca | **concluída** (2026-09-09) |
 | 2 — Autenticação | **concluída** (2026-09-10) |
 | 3 — Reprodução | **concluída** (2026-09-10) |
-| 4 — UI completa | próxima |
-| 5 — Empacotamento | — |
+| 4 — UI completa | **concluída** (2026-09-14) |
+| 5 — Empacotamento | próxima |
 
 **Fase 0** entregou o workspace Cargo com `ytcl-core` e `ytcl-player`, o crate
 Tauri com o protocolo `ytmart://`, o frontend Svelte 5 + Vite, a config em TOML
@@ -65,11 +65,6 @@ e o overlay de diagnóstico (F3).
 **Fase 1** entregou o adaptador InnerTube, o cache SQLite com
 stale-while-revalidate, o download de capas sob demanda e a tela de busca com
 lista virtualizada.
-
-**Fase 3** entregou a reprodução: resolução de stream via `yt-dlp`, backend
-libmpv com proxy `ytclstream://`, fila (shuffle determinístico, repeat),
-orquestrador `Player` (gapless por pré-resolução, recuperação de URL expirada) e
-a barra do player.
 
 **Fase 2** entregou o cofre de contas (`ytcl-core/src/auth.rs`, cookie no
 keyring do SO), a janela de login do Google (`src-tauri/src/login_window.rs`), a
@@ -81,6 +76,14 @@ reconexão.
 backend de áudio com libmpv em modo só-áudio, a fila (shuffle determinístico,
 repeat), o orquestrador `Player` (gapless por pré-resolução, recuperação de URL
 expirada) e a barra do player.
+
+**Fase 4** entregou a navegação: roteador em memória com voltar/avançar
+(`src/lib/router.svelte.ts`), telas de Início (prateleiras públicas via comando
+`home`), Álbum, Artista, Playlist (paginada) e Fila (reordenação por
+`draggable` nativo), `TrackRow` com menu de contexto global, `PlayerBar` com
+título/artista clicáveis, mudo e atalho para a fila, skeletons/estados
+vazios/erros inline em todas as telas e os atalhos de teclado (Espaço, ←/→
+seek, Ctrl+←/→ faixa, Ctrl+↑/↓ volume, Alt+←/→ voltar/avançar, Ctrl+F, Ctrl+L).
 
 ### Correções de rota
 
@@ -128,6 +131,24 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
   revalidação termina, os comandos devolvem `{ data, stale }` e o frontend
   repete a chamada com `refresh: true`. Menos peças móveis, mesmo efeito.
   *(Fase 1)*
+- **"Curtir" ficou fora do menu de contexto.** O rustypipe não tem endpoint de
+  avaliação (like/dislike); fazer exigiria uma chamada InnerTube crua fora do
+  `innertube.rs` ou um patch no fork. Adiado para depois do v1. *(Fase 4)*
+- **A Início mostra prateleiras públicas, não o feed personalizado.** O
+  rustypipe não expõe o feed da conta. O comando `home` junta
+  `music_new_albums` e `music_charts`; como as paradas de faixas chegam vazias
+  em vários países, a prateleira de paradas cai em cascata para artistas e
+  playlists, com o título acompanhando o conteúdo. *(Fase 4)*
+- **"Playlists" não virou item próprio na barra lateral.** Já é uma aba da
+  Biblioteca; um item separado duplicaria a mesma lista. *(Fase 4)*
+- **Início, Buscar e Biblioteca ficam montadas depois da primeira visita**
+  (escondidas com `content-visibility: hidden`). Com o roteador desmontando a
+  tela anterior, voltar de um álbum para a busca refazia a busca e perdia a
+  rolagem. Telas de detalhe continuam sendo montadas sob demanda. *(Fase 4)*
+- **A tela de Artista não é virtualizada.** Populares e álbuns vêm limitados
+  pela própria resposta do YouTube (dezenas de itens); a página rola inteira.
+  Listas sem teto (playlist, curtidas, busca, fila grande) seguem
+  virtualizadas. *(Fase 4)*
 
 ---
 

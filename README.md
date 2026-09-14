@@ -22,14 +22,27 @@ pessoal, fornecida como está, sem garantia. Você responde pelo modo como a usa
 | 1 — Metadados e busca | concluída |
 | 2 — Autenticação | concluída |
 | 3 — Reprodução | concluída |
-| 4 — UI completa | próxima |
-| 5 — Empacotamento | pendente |
+| 4 — UI completa | concluída |
+| 5 — Empacotamento | próxima |
 
 Hoje o app **busca** músicas, álbuns, artistas e playlists direto do YouTube
-Music, **conecta a uma conta** (biblioteca, playlists, curtidas) e **toca**
-áudio — clicar numa música da busca ou das curtidas inicia a reprodução, com
-fila, gapless, shuffle e repeat. Falta a navegação por telas de detalhe
-(abrir um álbum/artista/playlist) — é a Fase 4.
+Music, **conecta a uma conta** (biblioteca, playlists, curtidas), **navega**
+por telas de álbum, artista e playlist com voltar/avançar e **toca** áudio com
+fila editável (arrastar para reordenar), gapless, shuffle e repeat. Falta o
+empacotamento (instaladores, `yt-dlp` embutido) — é a Fase 5.
+
+### Atalhos
+
+| Tecla | Ação |
+|---|---|
+| `Espaço` | tocar/pausar |
+| `←` / `→` | voltar/avançar 5 s na faixa |
+| `Ctrl+←` / `Ctrl+→` | faixa anterior/próxima |
+| `Ctrl+↑` / `Ctrl+↓` | volume |
+| `Alt+←` / `Alt+→` | tela anterior/próxima |
+| `Ctrl+F` | buscar |
+| `Ctrl+L` | biblioteca |
+| `F3` | overlay de performance |
 
 O plano completo — arquitetura, fases, alvos de performance, problemas
 conhecidos — está em **[`docs/plano.md`](docs/plano.md)**, com o estado de cada

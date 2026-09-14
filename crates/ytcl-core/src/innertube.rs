@@ -20,7 +20,8 @@ use serde::Serialize;
 use crate::error::{CoreError, Result};
 use crate::metadata::MetadataSource;
 use crate::model::{
-    Album, AlbumRef, ArtRef, Artist, ArtistRef, Page, Playlist, SearchFilter, SearchItem, Track,
+    Album, AlbumRef, ArtRef, Artist, ArtistRef, HomeSection, Page, Playlist, SearchFilter,
+    SearchItem, Track,
 };
 
 /// Tamanho de capa para linhas de lista (48px logicos em telas 2x, com folga).
@@ -36,6 +37,11 @@ const LIBRARY_LIMIT: usize = 1000;
 const ALL_ARTISTS: usize = 3;
 const ALL_TRACKS: usize = 12;
 const ALL_ALBUMS: usize = 8;
+
+/// Teto de itens por prateleira da tela Início. As respostas de
+/// `music_new_albums`/`music_charts` ja vem curtas, mas o teto evita
+/// surpresa se o YouTube resolver mandar mais.
+const HOME_ITEMS: usize = 20;
 
 pub struct InnerTube {
     rp: RustyPipe,
@@ -406,6 +412,91 @@ impl MetadataSource for InnerTube {
             items: items.into_iter().map(|t| SearchItem::Track(track_from(t))).collect(),
             continuation: next,
         })
+    }
+
+    /// Prateleiras da tela Início: novos lancamentos e as paradas.
+    ///
+    /// O YouTube Music nao expoe feed personalizado pelo rustypipe, entao
+    /// mostramos o que e publico. Duas chamadas em paralelo, mesmo padrao de
+    /// `search_all`: uma prateleira que falha ou vem vazia e so omitida, o
+    /// erro so sobe se nenhuma das duas render nada.
+    async fn home(&self) -> Result<Vec<HomeSection>> {
+        let q = self.query();
+
+        let (novos, paradas) = tokio::join!(q.music_new_albums(), q.music_charts(None));
+
+        let mut sections = Vec::new();
+        let mut algum_erro = None;
+
+        match novos {
+            Ok(albums) if !albums.is_empty() => sections.push(HomeSection {
+                title: "Novos lançamentos".to_string(),
+                items: albums
+                    .into_iter()
+                    .take(HOME_ITEMS)
+                    .map(|a| SearchItem::Album(album_from(a)))
+                    .collect(),
+            }),
+            Ok(_) => {}
+            Err(e) => algum_erro = Some(map_err(e)),
+        }
+
+        match paradas {
+            Ok(charts) => {
+                // O YouTube Music vem removendo aos poucos as paradas de
+                // musica das paginas de charts (`top_tracks`/`trending_tracks`
+                // chegam vazias em varios paises, mesmo a pagina existindo).
+                // Preferimos faixas quando vem; sem elas, caimos para
+                // artistas e por ultimo playlists de genero — sempre o que a
+                // resposta tiver de mais parecido com "em alta".
+                // O título acompanha o que de fato veio, para a prateleira não
+                // prometer faixas e mostrar artistas.
+                let (title, items): (&str, Vec<SearchItem>) = if !charts.trending_tracks.is_empty()
+                {
+                    let items = charts.trending_tracks.into_iter().take(HOME_ITEMS);
+                    (
+                        "Em alta",
+                        items.map(|t| SearchItem::Track(track_from(t))).collect(),
+                    )
+                } else if !charts.top_tracks.is_empty() {
+                    let items = charts.top_tracks.into_iter().take(HOME_ITEMS);
+                    (
+                        "Mais tocadas",
+                        items.map(|t| SearchItem::Track(track_from(t))).collect(),
+                    )
+                } else if !charts.artists.is_empty() {
+                    let items = charts.artists.into_iter().take(HOME_ITEMS);
+                    (
+                        "Artistas em alta",
+                        items.map(|a| SearchItem::Artist(artist_from(a))).collect(),
+                    )
+                } else {
+                    let items = charts.playlists.into_iter().take(HOME_ITEMS);
+                    (
+                        "Paradas",
+                        items
+                            .map(|p| SearchItem::Playlist(playlist_from(p)))
+                            .collect(),
+                    )
+                };
+
+                if !items.is_empty() {
+                    sections.push(HomeSection {
+                        title: title.to_string(),
+                        items,
+                    });
+                }
+            }
+            Err(e) => algum_erro = Some(map_err(e)),
+        }
+
+        if sections.is_empty() {
+            if let Some(e) = algum_erro {
+                return Err(e);
+            }
+        }
+
+        Ok(sections)
     }
 
     async fn album(&self, id: &str) -> Result<(Album, Vec<Track>)> {

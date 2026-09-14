@@ -1,7 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import VirtualList from "../components/VirtualList.svelte";
   import ResultRow from "../components/ResultRow.svelte";
+  import Skeleton from "../components/Skeleton.svelte";
+  import EmptyState from "../components/EmptyState.svelte";
+  import ErrorState from "../components/ErrorState.svelte";
   import { player } from "../stores/player.svelte";
+  import { router } from "../router.svelte";
   import {
     search,
     searchMore,
@@ -27,10 +32,26 @@
   let loading = $state(false);
   let loadingMore = $state(false);
   let error = $state<string | null>(null);
+  /** Erro da página seguinte — fica no rodapé, sem sumir com o que carregou. */
+  let moreError = $state<string | null>(null);
   let searched = $state(false);
+  /** Termo da última busca que respondeu; o campo pode já ter outro texto. */
+  let lastTerm = $state("");
   // Só o método que usamos: descreve o contrato de verdade, em vez de um
   // ReturnType que o TypeScript aceitaria como qualquer coisa.
   let list = $state<{ scrollToTop: () => void } | null>(null);
+  let inputEl = $state<HTMLInputElement | null>(null);
+
+  // Ctrl+F (atalho global, em App.svelte) foca este campo — ele já trocou a
+  // rota para "search" antes de disparar o evento.
+  onMount(() => {
+    function onFocusSearch() {
+      inputEl?.focus();
+      inputEl?.select();
+    }
+    window.addEventListener("ytcl:focus-search", onFocusSearch);
+    return () => window.removeEventListener("ytcl:focus-search", onFocusSearch);
+  });
 
   /**
    * Cada busca recebe um número; só a mais recente pode escrever o resultado.
@@ -39,38 +60,50 @@
    */
   let epoch = 0;
 
-  async function run(refresh = false) {
-    const termo = query.trim();
+  /**
+   * `silent` é a revalidação de um resultado vencido do cache: troca os dados
+   * por baixo sem skeleton, sem arrancar a rolagem e sem apagar a tela se
+   * falhar. Termo e filtro vêm por parâmetro porque o campo pode ter mudado
+   * enquanto a primeira resposta chegava.
+   */
+  async function run(refresh = false, silent = false, termo = query.trim(), f = filter) {
     if (!termo) {
       items = [];
       continuation = null;
       searched = false;
+      error = null;
       return;
     }
 
     const meu = ++epoch;
-    loading = true;
-    error = null;
+    if (!silent) {
+      loading = true;
+      error = null;
+      moreError = null;
+    }
 
     try {
-      const res = await search(termo, filter, refresh);
+      const res = await search(termo, f, refresh);
       if (meu !== epoch) return;
 
       items = res.data.items;
       continuation = res.data.continuation;
       searched = true;
-      list?.scrollToTop();
+      lastTerm = termo;
+      if (!silent) list?.scrollToTop();
+      loading = false;
 
       // Veio do cache e está vencido: mostramos na hora e revalidamos por
       // baixo. É o que faz a busca repetida parecer instantânea.
-      if (res.stale && !refresh) void run(true);
+      if (res.stale && !refresh) void run(true, true, termo, f);
     } catch (e) {
       if (meu !== epoch) return;
+      loading = false;
+      // Dado velho na tela é melhor que um erro no lugar dele.
+      if (silent) return;
       error = errorMessage(e);
       items = [];
       continuation = null;
-    } finally {
-      if (meu === epoch) loading = false;
     }
   }
 
@@ -78,23 +111,31 @@
     if (!continuation || loadingMore) return;
     const meu = epoch;
     loadingMore = true;
+    moreError = null;
     try {
       const page = await searchMore(continuation);
       if (meu !== epoch) return;
       items = [...items, ...page.items];
       continuation = page.continuation;
     } catch (e) {
-      if (meu === epoch) error = errorMessage(e);
+      if (meu === epoch) moreError = errorMessage(e);
     } finally {
-      if (meu === epoch) loadingMore = false;
+      // Incondicional: se uma busca nova começou no meio, a trava ainda
+      // precisa soltar para ela conseguir paginar.
+      loadingMore = false;
     }
   }
 
   function activate(item: SearchItem) {
-    if (item.type !== "track") return; // abrir álbum/artista/playlist é fase 4
-    const tracks = items.filter((i) => i.type === "track");
-    const idx = tracks.findIndex((t) => t.id === item.id);
-    player.play(tracks, Math.max(0, idx));
+    if (item.type === "track") {
+      const tracks = items.filter((i) => i.type === "track");
+      const idx = tracks.findIndex((t) => t.id === item.id);
+      player.play(tracks, Math.max(0, idx));
+      return;
+    }
+    if (item.type === "album") router.push({ name: "album", id: item.id });
+    else if (item.type === "artist") router.push({ name: "artist", id: item.id });
+    else if (item.type === "playlist") router.push({ name: "playlist", id: item.id });
   }
 
   function pick(f: SearchFilter) {
@@ -113,6 +154,7 @@
   <form onsubmit={onSubmit}>
     <input
       type="search"
+      bind:this={inputEl}
       bind:value={query}
       placeholder="Buscar músicas, álbuns, artistas…"
       autocomplete="off"
@@ -134,11 +176,11 @@
 
   <div class="results">
     {#if error}
-      <p class="msg error">{error}</p>
+      <ErrorState message={error} onRetry={() => void run()} />
     {:else if loading && items.length === 0}
-      <p class="msg">buscando…</p>
+      <Skeleton variant="rows" count={10} />
     {:else if searched && items.length === 0}
-      <p class="msg">Nada encontrado para “{query}”.</p>
+      <EmptyState title="Nada encontrado" message={`Nenhum resultado para “${lastTerm}”.`} />
     {:else if items.length > 0}
       <VirtualList
         bind:this={list}
@@ -151,12 +193,20 @@
         {/snippet}
       </VirtualList>
     {:else}
-      <p class="msg">Digite algo e pressione Enter.</p>
+      <EmptyState
+        title="Busque músicas, álbuns, artistas e playlists"
+        message="Digite algo e pressione Enter. Ctrl+F volta para cá de qualquer tela."
+      />
     {/if}
   </div>
 
   {#if loadingMore}
     <div class="more">carregando mais…</div>
+  {:else if moreError}
+    <div class="more error">
+      <span>{moreError}</span>
+      <button onclick={() => void more()}>Tentar de novo</button>
+    </div>
   {/if}
 </div>
 
@@ -217,17 +267,21 @@
     padding: 0 var(--space-4);
   }
 
-  .msg {
-    padding: var(--space-6) var(--space-2);
-    color: var(--text-dim);
-  }
-  .msg.error {
-    color: #f87171;
-  }
-
   .more {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
     padding: var(--space-2) var(--space-6);
     color: var(--text-faint);
     font-size: 12px;
+  }
+  .more.error {
+    color: #f87171;
+  }
+  .more button {
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
   }
 </style>

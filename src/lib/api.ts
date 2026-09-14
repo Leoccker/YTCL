@@ -142,6 +142,19 @@ export const playlist = (id: string, refresh = false) =>
 export const playlistTracks = (id: string, continuation?: string) =>
   invoke<Page<Track>>("playlist_tracks", { id, continuation });
 
+// --- início ---------------------------------------------------------------
+
+export interface HomeSection {
+  title: string;
+  items: SearchItem[];
+}
+
+export interface HomeView {
+  sections: HomeSection[];
+}
+
+export const home = (refresh = false) => invoke<Cached<HomeView>>("home", { refresh });
+
 // --- contas -------------------------------------------------------------
 
 export interface Account {

@@ -13,10 +13,10 @@ use ytcl_core::cache::Entry;
 use ytcl_core::error::ErrorPayload;
 use ytcl_core::metadata::MetadataSource;
 use ytcl_core::model::{
-    Album, ArtRef, Artist, Page, Playlist, SearchFilter, SearchItem, Track,
+    Album, ArtRef, Artist, HomeSection, Page, Playlist, SearchFilter, SearchItem, Track,
 };
 
-use crate::state::{AppState, TTL_DETAIL, TTL_SEARCH};
+use crate::state::{AppState, TTL_DETAIL, TTL_HOME, TTL_SEARCH};
 
 type CmdResult<T> = std::result::Result<Cached<T>, ErrorPayload>;
 
@@ -241,4 +241,35 @@ pub async fn playlist_tracks(
         .await?;
     remember_art(&state, art_of_tracks(&page.items));
     Ok(page)
+}
+
+/// Espelho serializavel de `Vec<HomeSection>` para a tela Início.
+///
+/// O nome do campo (`sections`) e o formato do JSON fazem parte do contrato
+/// com o frontend — ver a tarefa da Fase 4 sobre a tela Início.
+#[derive(Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeView {
+    pub sections: Vec<HomeSection>,
+}
+
+/// Prateleiras publicas da Início: novos lancamentos, paradas etc. Sem feed
+/// personalizado no rustypipe, e o que da para mostrar sem depender de conta.
+#[tauri::command]
+pub async fn home(
+    state: State<'_, std::sync::Arc<AppState>>,
+    refresh: bool,
+) -> CmdResult<HomeView> {
+    let it = state.innertube.clone();
+
+    let result = cached_or_fetch(&state, "home", TTL_HOME, refresh, || async move {
+        let sections = it.home().await?;
+        Ok(HomeView { sections })
+    })
+    .await?;
+
+    for section in &result.data.sections {
+        remember_art(&state, art_of_search(&section.items));
+    }
+    Ok(result)
 }
