@@ -1,10 +1,12 @@
 <script lang="ts">
   import Login from "./Login.svelte";
   import MediaCard from "../components/MediaCard.svelte";
-  import VirtualList from "../components/VirtualList.svelte";
-  import ResultRow from "../components/ResultRow.svelte";
+  import TrackList from "../components/TrackList.svelte";
+  import Skeleton from "../components/Skeleton.svelte";
+  import EmptyState from "../components/EmptyState.svelte";
+  import ErrorState from "../components/ErrorState.svelte";
   import { auth } from "../stores/auth.svelte";
-  import { player } from "../stores/player.svelte";
+  import { router } from "../router.svelte";
   import {
     libraryPlaylists,
     libraryAlbums,
@@ -150,6 +152,13 @@
     load(t, true);
   }
 
+  /** Abre o card: cada aba mapeia para uma rota de detalhe diferente. */
+  function openCard(t: Tab, id: string) {
+    if (t === "playlists") router.push({ name: "playlist", id });
+    else if (t === "albums") router.push({ name: "album", id });
+    else if (t === "artists") router.push({ name: "artist", id });
+  }
+
   // Sessão nova (login/reconexão): zera tudo e recarrega a aba atual.
   let hadSession = false;
   $effect(() => {
@@ -187,24 +196,21 @@
 
     <div class="body">
       {#if st[tab].error}
-        <div class="msg error">
-          <p>{st[tab].error}</p>
-          <button onclick={() => retry(tab)}>tentar de novo</button>
-        </div>
+        <ErrorState message={st[tab].error ?? ""} onRetry={() => retry(tab)} />
       {:else if st[tab].loading && !st[tab].loaded}
-        <p class="msg">carregando…</p>
+        {#if tab === "liked"}
+          <Skeleton variant="rows" count={10} />
+        {:else}
+          <Skeleton variant="cards" count={12} />
+        {/if}
       {:else if tab === "liked"}
         {#if liked.length}
-          <VirtualList items={liked} itemHeight={56} onEnd={moreLiked}>
-            {#snippet row(t: Track, i: number)}
-              <ResultRow
-                item={{ type: "track", ...t }}
-                onActivate={() => player.play(liked, i)}
-              />
-            {/snippet}
-          </VirtualList>
+          <TrackList tracks={liked} onEnd={moreLiked} />
         {:else}
-          <p class="msg">Nenhuma música curtida.</p>
+          <EmptyState
+            title="Nenhuma música curtida"
+            message="As músicas que você curtir no YouTube Music aparecem aqui."
+          />
         {/if}
       {:else}
         {@const items = cards(tab)}
@@ -216,11 +222,12 @@
                 title={it.title}
                 subtitle={it.subtitle}
                 rounded={tab === "artists"}
+                onOpen={() => openCard(tab, it.id)}
               />
             {/each}
           </div>
         {:else}
-          <p class="msg">Nada aqui ainda.</p>
+          <EmptyState title="Nada aqui ainda" />
         {/if}
       {/if}
     </div>
@@ -274,22 +281,5 @@
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: var(--space-2);
     padding-bottom: var(--space-6);
-  }
-  .msg {
-    padding: var(--space-6) var(--space-2);
-    color: var(--text-dim);
-  }
-  .msg.error {
-    color: #f87171;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-3);
-  }
-  .msg.error button {
-    padding: var(--space-1) var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
   }
 </style>

@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import Art from "./Art.svelte";
   import { player } from "../stores/player.svelte";
+  import { router } from "../router.svelte";
 
   function fmt(secs: number): string {
     if (!isFinite(secs) || secs < 0) return "0:00";
@@ -43,6 +44,116 @@
   const repeatIcon = $derived(
     { off: "↻", all: "🔁", one: "🔂" }[player.repeat],
   );
+
+  // --- navegação a partir do título/artistas/capa --------------------------
+
+  function goAlbum() {
+    const id = player.current?.album?.id;
+    if (id) router.push({ name: "album", id });
+  }
+  function goArtist(id: string | null) {
+    if (id) router.push({ name: "artist", id });
+  }
+
+  /** Alterna a tela de fila: fecha se já estiver aberta, senão abre. */
+  function toggleQueueView() {
+    if (router.current.name === "queue") {
+      if (router.canBack) router.back();
+      else router.push({ name: "home" });
+    } else {
+      router.push({ name: "queue" });
+    }
+  }
+  function openQueueView() {
+    router.push({ name: "queue" });
+  }
+
+  // --- volume ---------------------------------------------------------------
+  //
+  // O valor exibido (`volValue`) muda a cada evento "input" para o slider
+  // responder ao arraste sem atraso. A chamada ao backend, porém, é limitada
+  // a ~10/s (throttle de 100ms) — arrastar dispara "input" bem mais rápido
+  // que isso, e cada chamada é uma invocação IPC. O valor final ao soltar
+  // ("change") sempre é enviado, sem esperar o throttle.
+
+  const VOL_THROTTLE_MS = 100;
+  let volDragging = $state(false);
+  let volValue = $state(player.volume);
+  let volTimer: ReturnType<typeof setTimeout> | null = null;
+  let volLastSent = 0;
+  let muted = $state(false);
+  let volBeforeMute = $state(player.volume || 0.8);
+
+  $effect(() => {
+    if (volDragging) return;
+    volValue = player.volume;
+    // O volume pode subir por fora da barra (Ctrl+↑): aí o som já voltou e
+    // a barra não pode continuar dizendo "mudo".
+    if (player.volume > 0) muted = false;
+  });
+
+  onDestroy(() => {
+    if (volTimer) clearTimeout(volTimer);
+  });
+
+
+  const sliderValue = $derived(muted ? 0 : volValue);
+  const volumeIcon = $derived(
+    muted || sliderValue === 0 ? "🔇" : sliderValue < 0.5 ? "🔉" : "🔊",
+  );
+
+  function sendVolumeThrottled(level: number) {
+    const now = performance.now();
+    if (now - volLastSent >= VOL_THROTTLE_MS) {
+      volLastSent = now;
+      player.setVolume(level);
+    } else if (volTimer === null) {
+      volTimer = setTimeout(
+        () => {
+          volTimer = null;
+          volLastSent = performance.now();
+          player.setVolume(volValue);
+        },
+        VOL_THROTTLE_MS - (now - volLastSent),
+      );
+    }
+  }
+
+  function onVolumeInput(e: Event) {
+    volDragging = true;
+    const level = Number((e.target as HTMLInputElement).value);
+    volValue = level;
+    if (muted && level > 0) muted = false;
+    sendVolumeThrottled(level);
+  }
+
+  function onVolumeCommit(e: Event) {
+    if (volTimer) {
+      clearTimeout(volTimer);
+      volTimer = null;
+    }
+    const level = Number((e.target as HTMLInputElement).value);
+    volValue = level;
+    if (muted && level > 0) muted = false;
+    volLastSent = performance.now();
+    player.setVolume(level);
+    volDragging = false;
+  }
+
+  function toggleMute() {
+    if (volTimer) {
+      clearTimeout(volTimer);
+      volTimer = null;
+    }
+    if (muted) {
+      muted = false;
+      player.setVolume(volBeforeMute);
+    } else {
+      volBeforeMute = volValue > 0 ? volValue : volBeforeMute || 0.8;
+      muted = true;
+      player.setVolume(0);
+    }
+  }
 </script>
 
 {#if player.error}
@@ -57,11 +168,24 @@
 {:else if player.hasTrack}
   <div class="bar">
     <div class="meta">
-      <Art art={player.current?.art} size={48} alt="" />
+      <button class="art-btn" onclick={openQueueView} title="Abrir fila">
+        <Art art={player.current?.art} size={48} alt="" />
+      </button>
       <div class="text">
-        <span class="title">{player.current?.title}</span>
+        {#if player.current?.album?.id}
+          <button class="title link" onclick={goAlbum}>{player.current.title}</button>
+        {:else}
+          <span class="title">{player.current?.title}</span>
+        {/if}
         <span class="artist">
-          {player.current?.artists.map((a) => a.name).join(", ")}
+          {#each player.current?.artists ?? [] as a, i (a.id ?? `${a.name}-${i}`)}
+            {#if i > 0}<span class="sep">, </span>{/if}
+            {#if a.id}
+              <button class="link" onclick={() => goArtist(a.id)}>{a.name}</button>
+            {:else}
+              <span>{a.name}</span>
+            {/if}
+          {/each}
         </span>
       </div>
     </div>
@@ -98,15 +222,27 @@
     </div>
 
     <div class="right">
-      <span class="vol-icon">🔊</span>
+      <button
+        class="queue-btn"
+        class:on={router.current.name === "queue"}
+        onclick={toggleQueueView}
+        title="Fila"
+      >
+        ☰
+      </button>
+      <button class="vol-icon" onclick={toggleMute} title={muted ? "Reativar som" : "Mudo"}>
+        {volumeIcon}
+      </button>
       <input
         class="vol"
         type="range"
         min="0"
         max="1"
         step="0.01"
-        value={player.volume}
-        oninput={(e) => player.setVolume(Number((e.target as HTMLInputElement).value))}
+        value={sliderValue}
+        oninput={onVolumeInput}
+        onchange={onVolumeCommit}
+        style:--v={sliderValue}
       />
     </div>
   </div>
@@ -149,6 +285,10 @@
     gap: var(--space-3);
     min-width: 0;
   }
+  .art-btn {
+    flex: none;
+    border-radius: var(--radius-sm);
+  }
   .text {
     display: flex;
     flex-direction: column;
@@ -162,10 +302,30 @@
   }
   .title {
     font-size: 13px;
+    text-align: left;
+    max-width: 100%;
+  }
+  button.title {
+    color: var(--text);
+  }
+  button.title:hover {
+    color: var(--accent);
+    text-decoration: underline;
   }
   .artist {
     font-size: 12px;
     color: var(--text-dim);
+  }
+  .artist .sep {
+    color: var(--text-faint);
+  }
+  .artist .link {
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .artist .link:hover {
+    color: var(--text);
+    text-decoration: underline;
   }
 
   .center {
@@ -238,15 +398,35 @@
     justify-content: flex-end;
     gap: var(--space-2);
   }
+  .queue-btn {
+    color: var(--text-dim);
+    font-size: 15px;
+    padding: var(--space-1);
+  }
+  .queue-btn:hover {
+    color: var(--text);
+  }
+  .queue-btn.on {
+    color: var(--accent);
+  }
   .vol-icon {
+    color: var(--text-dim);
     font-size: 13px;
+    padding: var(--space-1);
+    line-height: 1;
+  }
+  .vol-icon:hover {
+    color: var(--text);
   }
   .vol {
     width: 90px;
+    /* --v é a fração 0..1 do volume atual, vinda do elemento via style: no
+       markup — antes ficava sem nenhum valor real definido em lugar nenhum
+       e o preenchimento não acompanhava o slider. */
     background: linear-gradient(
       to right,
       var(--text-dim) calc(var(--v, 0.8) * 100%),
-      var(--bg-active) 0
+      var(--bg-active) calc(var(--v, 0.8) * 100%)
     );
   }
 </style>

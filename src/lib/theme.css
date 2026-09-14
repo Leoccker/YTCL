@@ -95,3 +95,27 @@ button {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Botões de ação das telas (Tocar, Aleatório…). Globais para cada tela não
+   reinventar o seu e o app não ficar com três estilos de "Tocar". */
+.btn {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-weight: 600;
+}
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn.primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
