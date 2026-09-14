@@ -50,6 +50,10 @@ pub struct AppState {
     player: RwLock<Option<Arc<Player>>>,
     secrets: KeyringStore,
     session: RwLock<SessionState>,
+    /// Notifica a ponte Tauri sempre que a sessao muda. O snapshot continua
+    /// necessario no boot, pois a hidratacao pode terminar antes de a UI
+    /// registrar o listener.
+    session_updates: tokio::sync::watch::Sender<SessionState>,
     config: RwLock<Config>,
 }
 
@@ -60,6 +64,8 @@ impl AppState {
         let artwork = Fetcher::new(paths.art_dir.clone(), ART_CONCURRENCY);
         let innertube = InnerTube::new(&paths.cache_dir)?;
 
+        let (session_updates, _) = tokio::sync::watch::channel(SessionState::LoggedOut);
+
         Ok(Self {
             innertube: Arc::new(innertube),
             cache,
@@ -67,6 +73,7 @@ impl AppState {
             player: RwLock::new(None),
             secrets: KeyringStore,
             session: RwLock::new(SessionState::LoggedOut),
+            session_updates,
             config: RwLock::new(config),
             paths,
         })
@@ -110,15 +117,27 @@ impl AppState {
     }
 
     pub fn set_session(&self, s: SessionState) {
-        *self.session.write() = s;
+        // Mantem a escrita e a notificacao na mesma secao critica: quem
+        // recebe o evento nunca observa uma ordem diferente da sessao.
+        let mut session = self.session.write();
+        *session = s.clone();
+        self.session_updates.send_replace(s);
+    }
+
+    pub fn subscribe_session(&self) -> tokio::sync::watch::Receiver<SessionState> {
+        self.session_updates.subscribe()
     }
 
     /// Marca a sessao atual como expirada — chamado quando um comando de
     /// biblioteca leva 401/403. Nao faz nada se ja nao havia conta ativa.
     pub fn mark_expired(&self) {
-        let mut s = self.session.write();
-        if let SessionState::Active { account } = &*s {
-            *s = SessionState::Expired { account: account.clone() };
+        let mut session = self.session.write();
+        if let SessionState::Active { account } = &*session {
+            let expired = SessionState::Expired {
+                account: account.clone(),
+            };
+            *session = expired.clone();
+            self.session_updates.send_replace(expired);
         }
     }
 

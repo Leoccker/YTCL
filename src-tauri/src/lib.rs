@@ -35,15 +35,6 @@ pub fn run() {
         });
     }
 
-    // Re-hidrata a sessao da conta ativa em segundo plano: se o cookie ainda
-    // valer, a biblioteca ja aparece sem o usuario fazer nada.
-    {
-        let state = state.clone();
-        tauri::async_runtime::spawn(async move {
-            state.hydrate_session().await;
-        });
-    }
-
     let protocol_state = state.clone();
     let setup_state = state.clone();
 
@@ -96,6 +87,24 @@ pub fn run() {
             commands::player_available,
         ])
         .setup(move |app| {
+            // A ponte de sessao nasce antes da hidratacao. Assim, se ela
+            // terminar depois de a UI ouvir, a troca chega por evento; se
+            // terminar antes, `auth_status` ainda devolve o snapshot atual.
+            let app_handle = app.handle().clone();
+            let mut updates = setup_state.subscribe_session();
+            tauri::async_runtime::spawn(async move {
+                use tauri::Emitter;
+
+                while updates.changed().await.is_ok() {
+                    let _ = app_handle.emit("auth-session", updates.borrow().clone());
+                }
+            });
+
+            let hydrate_state = setup_state.clone();
+            tauri::async_runtime::spawn(async move {
+                hydrate_state.hydrate_session().await;
+            });
+
             // O player usa tokio::spawn, entao precisa nascer DENTRO de uma
             // task do runtime (o setup() roda fora do contexto do reactor).
             // A ponte reencaminha cada PlayerEvent como evento Tauri "player".
@@ -104,6 +113,9 @@ pub fn run() {
                 use tauri::Emitter;
                 let (to_ui, mut from_player) = tokio::sync::mpsc::unbounded_channel();
                 setup_state.init_player(to_ui);
+                // A UI assina "player" antes de ler o snapshot. Este sinal
+                // cobre o caso em que o mpv so fica pronto depois da leitura.
+                let _ = app_handle.emit("player", serde_json::json!({ "event": "ready" }));
                 while let Some(ev) = from_player.recv().await {
                     let _ = app_handle.emit("player", ev);
                 }

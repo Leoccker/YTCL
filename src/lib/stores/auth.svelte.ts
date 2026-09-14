@@ -6,6 +6,7 @@
  */
 import {
   authStatus,
+  onAuthSession,
   authLoginGoogle,
   authLoginCookie,
   authReconnect,
@@ -23,6 +24,8 @@ class AuthState {
   /** Uma operação de login/reconexão em andamento (webview aberto). */
   busy = $state(false);
   error = $state<string | null>(null);
+  #initialized = false;
+  #refreshVersion = 0;
 
   readonly loggedIn = $derived(this.session.kind === "active");
   readonly expired = $derived(this.session.kind === "expired");
@@ -31,13 +34,30 @@ class AuthState {
   );
 
   async refresh() {
+    const version = ++this.#refreshVersion;
     try {
       const s = await authStatus();
+      if (version !== this.#refreshVersion) return;
       this.session = s.session;
       this.accounts = s.accounts;
     } catch (e) {
+      if (version !== this.#refreshVersion) return;
       this.error = errorMessage(e);
     }
+  }
+
+  /**
+   * Assina antes do snapshot. A sessão pode ser hidratada a qualquer momento
+   * durante o boot; se o evento ja aconteceu, `refresh` le o estado atual.
+   */
+  async init() {
+    if (this.#initialized) return;
+    this.#initialized = true;
+    await onAuthSession((session) => {
+      this.session = session;
+      void this.refresh();
+    });
+    await this.refresh();
   }
 
   private async run(fn: () => Promise<unknown>) {

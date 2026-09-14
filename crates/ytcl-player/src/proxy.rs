@@ -52,7 +52,9 @@ impl StreamSpec {
 
     fn from_uri(uri: &str) -> Option<Self> {
         let b64 = uri.strip_prefix("ytclstream://")?;
-        let json = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(b64).ok()?;
+        let json = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(b64)
+            .ok()?;
         serde_json::from_slice(&json).ok()
     }
 }
@@ -76,6 +78,61 @@ pub struct Stream {
 
 impl std::panic::RefUnwindSafe for Stream {}
 
+/// Aceitamos somente a resposta que corresponde exatamente ao Range pedido.
+/// Um `200 OK` pode conter o arquivo inteiro a partir do byte zero; usá-lo
+/// para um seek preencheria o buffer com bytes no offset errado.
+fn content_range_matches(value: &str, start: u64, end: u64, total: u64) -> bool {
+    let Some(value) = value.trim().strip_prefix("bytes ") else {
+        return false;
+    };
+    let Some((range, response_total)) = value.split_once('/') else {
+        return false;
+    };
+    let Some((response_start, response_end)) = range.split_once('-') else {
+        return false;
+    };
+    response_start.parse::<u64>().ok() == Some(start)
+        && response_end.parse::<u64>().ok() == Some(end)
+        && response_total.parse::<u64>().ok() == Some(total)
+}
+
+fn validate_range_headers(
+    status: reqwest::StatusCode,
+    content_range: Option<&str>,
+    start: u64,
+    end: u64,
+    total: u64,
+) -> anyhow::Result<()> {
+    if status != reqwest::StatusCode::PARTIAL_CONTENT {
+        return Err(anyhow::anyhow!("HTTP {status}"));
+    }
+    let content_range =
+        content_range.ok_or_else(|| anyhow::anyhow!("resposta 206 sem Content-Range"))?;
+    if !content_range_matches(content_range, start, end, total) {
+        return Err(anyhow::anyhow!("Content-Range inesperado: {content_range}"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn validate_range_response(
+    status: reqwest::StatusCode,
+    content_range: Option<&str>,
+    body_len: usize,
+    start: u64,
+    end: u64,
+    total: u64,
+) -> anyhow::Result<()> {
+    validate_range_headers(status, content_range, start, end, total)?;
+    let expected_len = (end - start + 1) as usize;
+    if body_len != expected_len {
+        return Err(anyhow::anyhow!(
+            "corpo do Range tem {body_len} bytes, esperado {expected_len}"
+        ));
+    }
+    Ok(())
+}
+
 pub fn open(env: &mut ProxyEnv, uri: &str) -> Stream {
     // `open` não pode falhar com Result; uma URI inválida vira um stream
     // "morto" que devolve EOF na hora.
@@ -84,6 +141,7 @@ pub fn open(env: &mut ProxyEnv, uri: &str) -> Stream {
         ua: String::new(),
         size: 0,
     });
+    let failed = spec.size == 0 || spec.url.is_empty();
     Stream {
         rt: env.rt.clone(),
         http: env.http.clone(),
@@ -93,7 +151,7 @@ pub fn open(env: &mut ProxyEnv, uri: &str) -> Stream {
         pos: 0,
         buf: Vec::new(),
         buf_start: 0,
-        failed: false,
+        failed,
     }
 }
 
@@ -145,17 +203,33 @@ fn fetch_block(s: &mut Stream, at: u64) -> bool {
     let url = s.url.clone();
     let ua = s.ua.clone();
     let http = s.http.clone();
-    let result = s.rt.block_on(async move {
+    let total = s.size;
+    let rt = s.rt.clone();
+    let result = rt.block_on(async move {
         let resp = http
             .get(&url)
             .header(reqwest::header::USER_AGENT, ua)
             .header(reqwest::header::RANGE, range)
             .send()
             .await?;
-        if !resp.status().is_success() {
-            return Err(anyhow::anyhow!("HTTP {}", resp.status()));
+        let content_range = resp
+            .headers()
+            .get(reqwest::header::CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let status = resp.status();
+        // Valida os cabeçalhos antes de consumir o corpo: uma origem que
+        // ignorar Range com `200 OK` não pode nos fazer baixar a faixa toda.
+        validate_range_headers(status, content_range.as_deref(), start, end, total)?;
+        let bytes = resp.bytes().await?;
+        let expected_len = (end - start + 1) as usize;
+        if bytes.len() != expected_len {
+            return Err(anyhow::anyhow!(
+                "corpo do Range tem {} bytes, esperado {expected_len}",
+                bytes.len()
+            ));
         }
-        Ok::<_, anyhow::Error>(resp.bytes().await?)
+        Ok::<_, anyhow::Error>(bytes)
     });
 
     match result {
@@ -168,5 +242,44 @@ fn fetch_block(s: &mut Stream, at: u64) -> bool {
             tracing::warn!("proxy: bloco {start}-{end} falhou: {e}");
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejeita_200_que_ignora_range_em_seek() {
+        assert!(validate_range_response(reqwest::StatusCode::OK, None, 4, 4, 7, 8).is_err());
+    }
+
+    #[test]
+    fn le_so_resposta_206_com_range_exato() {
+        assert!(validate_range_response(
+            reqwest::StatusCode::PARTIAL_CONTENT,
+            Some("bytes 4-7/8"),
+            4,
+            4,
+            7,
+            8,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn content_range_nao_aceita_offset_ou_total_diferente() {
+        assert!(content_range_matches("bytes 4-7/8", 4, 7, 8));
+        assert!(!content_range_matches("bytes 0-7/8", 4, 7, 8));
+        assert!(!content_range_matches("bytes 4-7/9", 4, 7, 8));
+        assert!(validate_range_response(
+            reqwest::StatusCode::PARTIAL_CONTENT,
+            Some("bytes 4-7/8"),
+            3,
+            4,
+            7,
+            8,
+        )
+        .is_err());
     }
 }
