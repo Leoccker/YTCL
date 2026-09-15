@@ -132,3 +132,17 @@ Ao mexer no README ou em qualquer texto público: o nome do projeto é **YTCL**,
 "YouTube"/"YouTube Music" só como descrição; disclaimer de não afiliação; não
 liderar com "sem anúncios". Ver `docs/plano.md > Context > Condições de
 publicação`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues ficam no GitHub Issues (`Leoccker/YTCL`), via CLI `gh`. Ver `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Vocabulário padrão: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. Ver `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: um `CONTEXT.md` e `docs/adr/` na raiz. Ver `docs/agents/domain.md`.
