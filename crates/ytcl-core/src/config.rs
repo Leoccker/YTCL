@@ -17,6 +17,16 @@ pub struct Paths {
     pub art_dir: PathBuf,
     pub db_file: PathBuf,
     pub config_file: PathBuf,
+    /// Diretorio de dados do app (`ProjectDirs::data_local_dir`). Hoje so
+    /// guarda `bin/`, mas fica separado do cache porque o cache pode ser
+    /// podado ou limpo pelo usuario sem levar o yt-dlp junto. Local e nao
+    /// roaming: no Windows o `data_dir` e `AppData\Roaming`, que perfis de
+    /// rede sincronizam — um executavel de ~35 MB nao deve ir junto.
+    pub data_dir: PathBuf,
+    /// Copia gravavel do yt-dlp (`ytdlp_manager.rs`). Separado do
+    /// `data_dir` para o carimbo de atualizacao (`.yt-dlp-last-update`)
+    /// morar ao lado do binario que ele descreve.
+    pub bin_dir: PathBuf,
 }
 
 impl Paths {
@@ -26,18 +36,27 @@ impl Paths {
 
         let config_dir = dirs.config_dir().to_path_buf();
         let cache_dir = dirs.cache_dir().to_path_buf();
+        let data_dir = dirs.data_local_dir().to_path_buf();
 
         Ok(Self {
             art_dir: cache_dir.join("art"),
             db_file: cache_dir.join("ytcl.db"),
             config_file: config_dir.join("config.toml"),
+            bin_dir: data_dir.join("bin"),
             config_dir,
             cache_dir,
+            data_dir,
         })
     }
 
     pub fn ensure(&self) -> Result<()> {
-        for d in [&self.config_dir, &self.cache_dir, &self.art_dir] {
+        for d in [
+            &self.config_dir,
+            &self.cache_dir,
+            &self.art_dir,
+            &self.data_dir,
+            &self.bin_dir,
+        ] {
             std::fs::create_dir_all(d)
                 .map_err(|e| CoreError::Other(format!("criando {}: {e}", d.display())))?;
         }
@@ -56,6 +75,11 @@ pub struct Config {
     /// Normalizacao de volume a partir do `loudnessDb` do proprio YouTube.
     pub normalize_volume: bool,
     pub last_account_id: Option<String>,
+    /// Caminho proprio para o yt-dlp, escolhido pelo usuario. Tem prioridade
+    /// sobre a copia gerenciada e o PATH, e nunca e auto-atualizado — ver
+    /// `ytdlp_manager.rs`. `#[serde(default)]` no struct cobre config antiga
+    /// sem este campo.
+    pub ytdlp_path: Option<String>,
 }
 
 impl Default for Config {
@@ -66,6 +90,7 @@ impl Default for Config {
             prefer_opus: true,
             normalize_volume: true,
             last_account_id: None,
+            ytdlp_path: None,
         }
     }
 }

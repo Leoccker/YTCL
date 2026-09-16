@@ -93,6 +93,11 @@ impl AppState {
     /// Cria o backend de audio e o player. Chamado de uma task no boot,
     /// quando o runtime tokio ja esta ativo. `to_ui` recebe os `PlayerEvent`
     /// que a ponte reencaminha como evento Tauri.
+    ///
+    /// Quem chama precisa ter rodado `ytcl_core::ytdlp_manager::
+    /// install_from_embedded` antes disto, para a copia gerenciada (se
+    /// houver binario embutido) ja existir quando `choose_binary` olhar
+    /// para `bin_dir`.
     pub fn init_player(
         &self,
         to_ui: tokio::sync::mpsc::UnboundedSender<ytcl_player::PlayerEvent>,
@@ -100,9 +105,25 @@ impl AppState {
         let (backend_tx, backend_rx) = tokio::sync::mpsc::unbounded_channel();
         match MpvBackend::new(backend_tx) {
             Ok(backend) => {
+                let (bin_path, source) = ytcl_core::ytdlp_manager::choose_binary(
+                    self.config().ytdlp_path.as_deref(),
+                    &self.paths.bin_dir,
+                );
+                tracing::info!("yt-dlp: usando {bin_path} ({})", source.label());
+
+                // Versao so pra log — roda em paralelo, sem atrasar a
+                // abertura nem a primeira resolucao de stream.
+                let version_probe = bin_path.clone();
+                tokio::spawn(async move {
+                    match YtDlp::new(version_probe).check().await {
+                        Ok(v) => tracing::info!("yt-dlp: versao {v}"),
+                        Err(e) => tracing::warn!("yt-dlp: nao consegui checar a versao: {e}"),
+                    }
+                });
+
                 let player = Player::new(
                     Arc::new(backend),
-                    Arc::new(YtDlp::default()),
+                    Arc::new(YtDlp::new(bin_path)),
                     backend_rx,
                     to_ui,
                 );

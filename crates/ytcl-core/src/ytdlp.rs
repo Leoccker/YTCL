@@ -16,14 +16,16 @@ use crate::error::{CoreError, Result};
 use crate::stream::{AudioCodec, ResolvedStream, StreamResolver};
 
 pub struct YtDlp {
-    /// Caminho do binário. `yt-dlp` (do PATH) por padrão.
+    /// Caminho do binário. `yt-dlp` (do PATH) por padrão — ver
+    /// `ytdlp_manager::choose_binary` para a ordem real usada pelo app
+    /// (config -> cópia gerenciada -> PATH).
     binary: String,
 }
 
 impl Default for YtDlp {
     fn default() -> Self {
         Self {
-            binary: "yt-dlp".into(),
+            binary: crate::ytdlp_manager::bin_name().into(),
         }
     }
 }
@@ -35,22 +37,59 @@ impl YtDlp {
         }
     }
 
+    fn command(&self) -> tokio::process::Command {
+        let mut cmd = tokio::process::Command::new(&self.binary);
+        no_window(&mut cmd);
+        cmd
+    }
+
     /// Confere que o binário responde. Chamado na inicialização para o app
     /// avisar cedo se falta o yt-dlp.
     pub async fn check(&self) -> Result<String> {
-        let out = tokio::process::Command::new(&self.binary)
+        let out = self
+            .command()
             .arg("--version")
             .output()
             .await
-            .map_err(|e| {
-                CoreError::Other(format!("yt-dlp não encontrado ({}): {e}", self.binary))
-            })?;
+            .map_err(|e| self.not_found_error(e))?;
         if !out.status.success() {
             return Err(CoreError::Other("yt-dlp --version falhou".into()));
         }
         Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
     }
+
+    /// Mensagem de erro útil: ela aparece direto na barra do player
+    /// (`PlayerEvent::Error`), então precisa dizer o que fazer, não só que
+    /// falhou. `NotFound` é o caso comum (nenhum dos três binários da ordem
+    /// de escolha existe); outros erros de I/O (permissão, etc.) mantêm o
+    /// texto original.
+    fn not_found_error(&self, e: std::io::Error) -> CoreError {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CoreError::Other(format!(
+                "yt-dlp não encontrado ({}). Ele é instalado automaticamente na próxima \
+                 abertura do app se o pacote trouxe o binário embutido; se não, instale o \
+                 yt-dlp no sistema ou aponte um caminho em `ytdlp_path` na configuração.",
+                self.binary
+            ))
+        } else {
+            CoreError::Other(format!("chamando o yt-dlp ({}): {e}", self.binary))
+        }
+    }
 }
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Sem isso, cada faixa resolvida abre (e fecha) uma janela de console atrás
+/// do app em build release no Windows.
+#[cfg(windows)]
+fn no_window(cmd: &mut tokio::process::Command) {
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn no_window(_cmd: &mut tokio::process::Command) {}
 
 /// Um item de `formats` do JSON do yt-dlp — ou o próprio topo quando `-f`
 /// seleciona um formato único.
@@ -145,7 +184,8 @@ fn size_from_probe_response(
 impl StreamResolver for YtDlp {
     async fn resolve(&self, video_id: &str) -> Result<ResolvedStream> {
         // videoId puro é aceito pelo yt-dlp. `--` encerra as flags.
-        let out = tokio::process::Command::new(&self.binary)
+        let out = self
+            .command()
             .args([
                 "-J",
                 "--no-warnings",
@@ -157,7 +197,7 @@ impl StreamResolver for YtDlp {
             ])
             .output()
             .await
-            .map_err(|e| CoreError::Other(format!("chamando o yt-dlp: {e}")))?;
+            .map_err(|e| self.not_found_error(e))?;
 
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
