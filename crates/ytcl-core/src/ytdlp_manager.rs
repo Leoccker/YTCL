@@ -171,20 +171,6 @@ pub fn should_update(bin_dir: &Path, now: u64) -> bool {
     }
 }
 
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
-/// Sem isso, toda chamada de subprocesso do yt-dlp no Windows abre (e pisca)
-/// uma janela de console atras do app em build release.
-#[cfg(windows)]
-fn no_window(cmd: &mut tokio::process::Command) {
-    use std::os::windows::process::CommandExt;
-    cmd.creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-fn no_window(_cmd: &mut tokio::process::Command) {}
-
 /// Tenta `<managed> -U` (auto-atualizacao nativa do yt-dlp); se falhar, cai
 /// para baixar a release mais recente do GitHub. So mexe em `bin_dir`.
 ///
@@ -208,7 +194,7 @@ pub async fn update_managed(bin_dir: &Path) -> Result<bool> {
 async fn try_self_update(managed: &Path) -> Result<()> {
     let mut cmd = tokio::process::Command::new(managed);
     cmd.arg("-U");
-    no_window(&mut cmd);
+    crate::ytdlp::no_window(&mut cmd);
 
     let output = tokio::time::timeout(UPDATE_TIMEOUT, cmd.output())
         .await

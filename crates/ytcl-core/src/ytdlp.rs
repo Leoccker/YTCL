@@ -82,14 +82,16 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Sem isso, cada faixa resolvida abre (e fecha) uma janela de console atrás
 /// do app em build release no Windows.
+///
+/// `creation_flags` e metodo proprio do `tokio::process::Command` no Windows,
+/// sem trait para importar.
 #[cfg(windows)]
-fn no_window(cmd: &mut tokio::process::Command) {
-    use std::os::windows::process::CommandExt;
+pub(crate) fn no_window(cmd: &mut tokio::process::Command) {
     cmd.creation_flags(CREATE_NO_WINDOW);
 }
 
 #[cfg(not(windows))]
-fn no_window(_cmd: &mut tokio::process::Command) {}
+pub(crate) fn no_window(_cmd: &mut tokio::process::Command) {}
 
 /// Um item de `formats` do JSON do yt-dlp — ou o próprio topo quando `-f`
 /// seleciona um formato único.
