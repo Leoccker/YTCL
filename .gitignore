@@ -45,3 +45,6 @@ Thumbs.db
 
 # Worktrees que o Claude Code cria para agentes isolados.
 /.claude/worktrees/
+
+#outros
+possiveis correções.md
