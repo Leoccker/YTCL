@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Metainfo AppStream do YTCL. O <id> segue o identifier do tauri.conf.json
+  (dev.ytcl.app); o <launchable> aponta pro nome real do .desktop que o
+  bundler do Tauri gera a partir do productName ("YTCL.desktop" — conferido
+  dentro do .deb construído, não escolhido à mão).
+
+  Texto público (ver CLAUDE.md > Aviso legal e docs/plano.md > Condições de
+  publicação): o nome do projeto é YTCL; "YouTube"/"YouTube Music" só como
+  descrição da finalidade, com aviso de não afiliação; sem liderar com
+  "sem anúncios".
+-->
+<component type="desktop-application">
+  <id>dev.ytcl.app</id>
+  <name>YTCL</name>
+  <developer id="dev.ytcl.app">
+    <name>Leoccker</name>
+  </developer>
+  <summary>Cliente nativo do YouTube Music</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <launchable type="desktop-id">YTCL.desktop</launchable>
+  <description>
+    <p>
+      YTCL é um cliente de desktop nativo, para Linux e Windows, que fala
+      direto com a API interna do YouTube Music (InnerTube). Não usa
+      Chromium embutido: a interface roda sobre o webview do sistema, o
+      núcleo é Rust e o áudio é reproduzido via libmpv.
+    </p>
+    <p>
+      YTCL não é afiliado, associado, autorizado nem endossado pelo Google
+      ou pelo YouTube. "YouTube" e "YouTube Music" são marcas do Google LLC,
+      citadas aqui apenas para descrever a finalidade do programa.
+    </p>
+  </description>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Music</category>
+  </categories>
+  <url type="homepage">https://github.com/Leoccker/YTCL</url>
+  <url type="bugtracker">https://github.com/Leoccker/YTCL/issues</url>
+  <provides>
+    <binary>ytcl</binary>
+  </provides>
+  <content_rating type="oars-1.1" />
+</component>
