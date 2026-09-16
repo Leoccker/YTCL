@@ -1,0 +1,131 @@
+name: Release
+
+# Dispara em tags v* (fluxo normal de release) e manualmente via
+# workflow_dispatch (para testar o pipeline de empacotamento sem publicar
+# uma tag nova, ou refazer um release a partir de uma tag existente).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write # só este workflow precisa criar/editar releases
+
+jobs:
+  release:
+    name: Empacota (${{ matrix.platform }})
+    strategy:
+      fail-fast: false # uma plataforma falhar não deve cancelar a outra
+      matrix:
+        include:
+          - platform: ubuntu-24.04 # gera .deb, .rpm e AppImage
+          - platform: windows-latest # gera .msi e o instalador NSIS
+    runs-on: ${{ matrix.platform }}
+    # O bundler do AppImage usa outras ferramentas empacotadas como AppImage
+    # (linuxdeploy etc.); sem FUSE disponível no runner, elas precisam rodar
+    # em modo "extrai e executa". Inofensivo no Windows, onde é ignorado.
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: 1
+      # O `strip` embutido no linuxdeploy é antigo e falha em libs de sistema
+      # com relocações RELR (visto no Fedora). As libs de distro já vêm sem
+      # símbolos, então desligar o strip quase não muda o tamanho do AppImage.
+      NO_STRIP: 1
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Instala dependências de sistema (Tauri 2 + libmpv)
+        if: matrix.platform == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libmpv-dev \
+            rpm \
+            file
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instala dependências do frontend
+        run: npm ci
+
+      # Não rodamos "npm run build" aqui: o tauri-action chama `tauri build`,
+      # que por sua vez dispara o `beforeBuildCommand` do tauri.conf.json
+      # (também "npm run build"), gerando ../dist antes de compilar.
+      - name: Instala toolchain Rust estável
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Prepara o ambiente MSVC (lib.exe etc.) antes de qualquer passo que
+      # toque cargo ou linke libmpv.
+      - name: Configura ambiente MSVC
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # Baixa o libmpv de desenvolvimento para Windows, gera mpv.lib, copia
+      # libmpv-2.dll para src-tauri/resources/windows/ e exporta MPV_LIB_DIR
+      # (GITHUB_ENV) e o diretório da DLL (GITHUB_PATH) — precisa rodar antes
+      # do build do Tauri, que compila e linka o crate ytcl-player.
+      - name: Baixa libmpv para Windows
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: pwsh packaging/fetch-mpv-windows.ps1
+
+      # yt-dlp embutido: baixado só no release, não no CI (ver docs/plano.md
+      # > Fase 5, item 3). Fica como recurso do bundle, copiado para
+      # <data_dir>/bin/yt-dlp na primeira execução do app.
+      - name: Baixa o yt-dlp (Linux)
+        if: matrix.platform == 'ubuntu-24.04'
+        run: bash packaging/fetch-ytdlp.sh
+
+      - name: Baixa o yt-dlp (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: pwsh packaging/fetch-ytdlp.ps1
+
+      # Só uma tag publica: disparado à mão a partir de uma branch, o
+      # `github.ref_name` seria o nome da branch e o tauri-action criaria uma
+      # tag e um release com esse nome.
+      - name: Build e publicação dos pacotes
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "YTCL ${{ github.ref_name }}"
+          releaseDraft: true
+          prerelease: false
+          releaseBody: |
+            Cliente de desktop não oficial para o YouTube Music, sem qualquer
+            afiliação com o Google ou o YouTube. Uso pessoal, feito falando
+            direto com a API interna do YouTube Music.
+
+            Baixe o instalador do seu sistema nos anexos abaixo (.deb/.rpm/
+            AppImage para Linux, .msi/instalador NSIS para Windows).
+
+      # Sem tag (workflow_dispatch numa branch): só gera os pacotes e os deixa
+      # como artefato da execução, para testar o empacotamento sem publicar.
+      - name: Build dos pacotes (sem publicar)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: tauri-apps/tauri-action@v1
+
+      - name: Guarda os pacotes como artefato
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ytcl-${{ matrix.platform }}
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/rpm/*.rpm
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+          if-no-files-found: error

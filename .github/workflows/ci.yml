@@ -1,0 +1,111 @@
+name: CI
+
+# Roda em push nas branches de trabalho e em todo pull request. Não baixa
+# yt-dlp nem gera pacotes de distribuição — isso é papel do release.yml.
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+
+# Cancela execuções antigas do mesmo ref (branch ou PR) quando chega um push
+# novo, para não gastar minutos de CI com commits já superados.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux (clippy + testes)
+    runs-on: ubuntu-24.04 # 22.04 só tem libmpv.so.1; crates/ytcl-player linka libmpv.so.2 via libmpv2
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Instala dependências de sistema (Tauri 2 + libmpv)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libmpv-dev \
+            rpm \
+            file
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instala dependências do frontend
+        run: npm ci
+
+      # tauri::generate_context!() exige que ../dist exista em tempo de
+      # compilação (build.rs falha sem isso) — o build do frontend precisa
+      # rodar antes de qualquer cargo clippy/test. `npm run build` já roda o
+      # svelte-check antes do vite build.
+      - name: Build do frontend (Svelte)
+        run: npm run build
+
+      - name: Instala toolchain Rust estável
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # Sem --ignored: os testes marcados #[ignore] batem na rede do YouTube e
+      # rodam só sob demanda (ver CLAUDE.md).
+      - name: cargo test
+        run: cargo test --workspace
+
+  windows:
+    name: Windows (clippy + testes)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instala dependências do frontend
+        run: npm ci
+
+      - name: Build do frontend (Svelte)
+        run: npm run build
+
+      - name: Instala toolchain Rust estável
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Prepara o ambiente de build MSVC (lib.exe etc.) antes do libmpv ser
+      # baixado/linkado — o script de fetch do libmpv e o próprio cargo
+      # dependem dele.
+      - name: Configura ambiente MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # Baixa o libmpv de desenvolvimento para Windows, gera mpv.lib, copia
+      # libmpv-2.dll para src-tauri/resources/windows/ e exporta MPV_LIB_DIR
+      # (GITHUB_ENV) e o diretório da DLL (GITHUB_PATH). Precisa rodar antes
+      # de qualquer passo de cargo: os binários de teste linkam o libmpv e
+      # carregam a DLL em tempo de execução.
+      - name: Baixa libmpv para Windows
+        shell: pwsh
+        run: pwsh packaging/fetch-mpv-windows.ps1
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
