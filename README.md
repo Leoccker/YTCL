@@ -23,13 +23,14 @@ pessoal, fornecida como está, sem garantia. Você responde pelo modo como a usa
 | 2 — Autenticação | concluída |
 | 3 — Reprodução | concluída |
 | 4 — UI completa | concluída |
-| 5 — Empacotamento | próxima |
+| 5 — Empacotamento | em validação |
 
 Hoje o app **busca** músicas, álbuns, artistas e playlists direto do YouTube
 Music, **conecta a uma conta** (biblioteca, playlists, curtidas), **navega**
 por telas de álbum, artista e playlist com voltar/avançar e **toca** áudio com
-fila editável (arrastar para reordenar), gapless, shuffle e repeat. Falta o
-empacotamento (instaladores, `yt-dlp` embutido) — é a Fase 5.
+fila editável (arrastar para reordenar), gapless, shuffle e repeat. Os pacotes
+Linux (`.deb`, `.rpm`, AppImage) já saem com o `yt-dlp` embutido; os
+instaladores Windows saem pelo CI e ainda estão em validação.
 
 ### Atalhos
 
@@ -80,16 +81,21 @@ sudo apt install -y libwebkit2gtk-4.1-dev libssl-dev \
 ```
 
 ### Windows
-Visual Studio Build Tools (C++), WebView2 Runtime (já vem no Windows 11), a
-`libmpv-2.dll` e o `yt-dlp.exe` — o bundler (Fase 5) empacota os dois como
-recurso.
+Visual Studio Build Tools (C++), WebView2 Runtime (já vem no Windows 11),
+PowerShell 7 e 7-Zip. O libmpv vem do build do shinchiro: num "Developer
+PowerShell", `pwsh packaging/fetch-mpv-windows.ps1` baixa a DLL, gera o
+`mpv.lib` e define `MPV_LIB_DIR` para o cargo.
 
 Além disso: [Rust](https://rustup.rs) e Node 20+.
 
-**`yt-dlp`** precisa estar no `PATH` (ou apontado por config). A busca e a
-biblioteca funcionam sem ele; tocar não. Nas distribuições ele costuma estar
-no repositório oficial; senão, `pipx install yt-dlp` ou o
-[binário standalone](https://github.com/yt-dlp/yt-dlp/releases).
+**`yt-dlp`**: os pacotes trazem a própria cópia, instalada em
+`~/.local/share/ytcl/bin` (Windows: `%LOCALAPPDATA%\ytcl\ytcl\data\bin`) e
+atualizada no máximo uma vez por dia, com checksum conferido. Em
+desenvolvimento o app usa o `yt-dlp` do `PATH` — nas distribuições ele costuma
+estar no repositório oficial; senão, `pipx install yt-dlp` ou o
+[binário standalone](https://github.com/yt-dlp/yt-dlp/releases). Para usar uma
+instalação própria, defina `ytdlp_path` no `config.toml`. A busca e a
+biblioteca funcionam sem ele; tocar não.
 
 ## Desenvolvimento
 
@@ -107,6 +113,19 @@ npm run tauri build -- --no-bundle
 Use sempre `npm run tauri build`, nunca `cargo build` direto — o `cargo build`
 sozinho não embute o frontend e o app abre com "Could not connect to localhost".
 
+### Pacotes
+
+```sh
+bash packaging/fetch-ytdlp.sh     # embute o yt-dlp (opcional)
+npm run tauri build -- --bundles deb,rpm,appimage
+```
+
+Os pacotes saem em `target/release/bundle/`. Sem o `fetch-ytdlp.sh` eles vêm
+sem o `yt-dlp` e o app usa o do `PATH`. Se o AppImage falhar no `strip` (distros
+novas, como o Fedora), rode com `NO_STRIP=1`. Tags `v*` no GitHub geram os
+pacotes de Linux e Windows num release em rascunho
+(`.github/workflows/release.yml`).
+
 ### Depuração
 
 ```sh
@@ -121,6 +140,14 @@ Mostra **RSS** (critério de aceite, alvo < 500 MB, é o que o monitor do sistem
 exibe) e **PSS** ao lado (divide as páginas compartilhadas — na tela vazia o
 release ficou em ~390 MB de RSS contra ~211 MB de PSS; a diferença é o piso do
 GTK/WebKit, o binário do app é ~3,6 MB disso).
+
+### Janela em branco (NVIDIA)
+
+Com driver NVIDIA proprietário anterior ao 560, o app define sozinho
+`__NV_DISABLE_EXPLICIT_SYNC=1`, que evita a janela abrir em branco no
+WebKitGTK. `YTCL_GPU_WORKAROUND=force` também desliga o renderizador DMABUF
+(`WEBKIT_DISABLE_DMABUF_RENDERER=1`); `YTCL_GPU_WORKAROUND=off` desliga tudo.
+Variáveis que você já definiu nunca são sobrescritas.
 
 ## Verificação
 

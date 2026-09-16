@@ -22,6 +22,10 @@ rusqlite = { version = "0.40.2", features = ["bundled"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots"] }
 uuid = { version = "1.20.0", features = ["v4"] }
 keyring = "4"
+# Confere o SHA2-256SUMS da release do yt-dlp antes de trocar o binario
+# gerenciado (ytdlp_manager.rs) — sem isso, um download incompleto ou
+# adulterado vira um executavel rodando sem aviso.
+sha2 = "0.10"
 
 [dev-dependencies]
 

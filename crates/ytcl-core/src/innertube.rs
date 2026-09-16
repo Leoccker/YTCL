@@ -220,17 +220,26 @@ impl CacheStorage for ScrubbedStorage {
             tracing::warn!("nao consegui gravar o cache do rustypipe: {e}");
             return;
         }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600));
-        }
+        restrict_to_owner(&self.path);
     }
 
     fn read(&self) -> Option<String> {
         std::fs::read_to_string(&self.path).ok()
     }
 }
+
+/// So o dono le o cache do rustypipe. Separado por plataforma, e nao um
+/// bloco `#[cfg(unix)]` no fim de `write`: no Windows o bloco some e o
+/// `return` do erro vira o ultimo comando, o que o clippy acusa.
+#[cfg(unix)]
+fn restrict_to_owner(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+}
+
+/// No Windows o perfil do usuario ja tem ACL propria.
+#[cfg(not(unix))]
+fn restrict_to_owner(_path: &Path) {}
 
 // ---------------------------------------------------------------------------
 // Conversao de tipos

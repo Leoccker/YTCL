@@ -35,6 +35,10 @@ cargo clippy --workspace --all-targets     # tem que passar limpo
 npm run check                               # svelte-check
 ```
 
+O CI (`.github/workflows/ci.yml`) roda o mesmo em Linux e Windows, com
+`clippy -- -D warnings`. Tags `v*` disparam o `release.yml`, que gera os pacotes
+num release em rascunho.
+
 Testes marcados `#[ignore]` batem na rede/YouTube e são o canário quando a API
 muda. Rodar sob demanda:
 
@@ -72,8 +76,9 @@ YTCL_MPV_LOG=/tmp/mpv.log ./target/release/ytcl     # log interno do mpv
 ## Dependências de sistema (dev)
 
 Fedora: `webkit2gtk4.1-devel openssl-devel librsvg2-devel mpv-libs-devel gcc gcc-c++ make`
-Mais: Rust (rustup), Node 20+, e **`yt-dlp` no PATH** (usado para resolver o
-stream — ver abaixo).
+Mais: Rust (rustup), Node 20+ e **`yt-dlp` no PATH** para rodar em
+desenvolvimento. O app empacotado traz a própria cópia; para embuti-la num build
+local, rode `bash packaging/fetch-ytdlp.sh` antes do `tauri build`.
 
 ## Decisões que NÃO devem ser quebradas
 
@@ -104,6 +109,9 @@ Estas sustentam a performance e a segurança. Ver `docs/plano.md` para o porquê
   (`crates/ytcl-core/src/ytdlp.rs`, trait `StreamResolver`). A decifragem de
   assinatura do rustypipe quebrou e as URLs do cliente iOS dele vêm truncadas.
   Detalhes em `docs/plano.md > Problemas conhecidos`.
+  Qual binário: `ytdlp_path` do config → cópia gerenciada em
+  `<data_local_dir>/bin` (instalada do bundle, atualizada 1x/dia com checksum)
+  → `yt-dlp` do PATH. Ver `crates/ytcl-core/src/ytdlp_manager.rs`.
 - **Playback**: o mpv não fala com o YouTube direto — o áudio passa pelo
   protocolo `ytclstream://` (`crates/ytcl-player/src/proxy.rs`), que baixa via
   `reqwest` em blocos de 256 KB (o YouTube dá 403 em `Range` aberto).

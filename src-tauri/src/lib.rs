@@ -111,9 +111,41 @@ pub fn run() {
             // A ponte reencaminha cada PlayerEvent como evento Tauri "player".
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                use tauri::Emitter;
+                use tauri::{Emitter, Manager};
                 let (to_ui, mut from_player) = tokio::sync::mpsc::unbounded_channel();
+
+                // yt-dlp: instala a copia gerenciada a partir do binario
+                // embutido no bundle (se houver — pode faltar num build de
+                // desenvolvimento sem o download do empacotamento, o que
+                // nunca e erro). So quem resolve `resource_dir` e o
+                // src-tauri; o ytcl-core so recebe o caminho.
+                let embedded = app_handle
+                    .path()
+                    .resource_dir()
+                    .ok()
+                    .map(|dir| dir.join("yt-dlp").join(ytcl_core::ytdlp_manager::bin_name()));
+                if let Err(e) = ytcl_core::ytdlp_manager::install_from_embedded(
+                    &setup_state.paths.bin_dir,
+                    embedded.as_deref(),
+                ) {
+                    tracing::warn!("yt-dlp: nao consegui instalar a copia gerenciada: {e}");
+                }
+
+                // Precisa rodar depois da instalacao acima: e ela que faz a
+                // copia gerenciada existir a tempo da primeira escolha de
+                // binario, dentro de init_player.
                 setup_state.init_player(to_ui);
+
+                // Atualizacao da copia gerenciada em segundo plano — no
+                // maximo 1x/dia (o proprio modulo checa o carimbo), sem
+                // atrasar a abertura nem trocar o binario que o YtDlp do
+                // player ja esta usando (o caminho continua o mesmo; so o
+                // conteudo do arquivo muda, entao a proxima resolucao ja
+                // usa a versao nova).
+                tokio::spawn(ytcl_core::ytdlp_manager::run_update_task(
+                    setup_state.paths.bin_dir.clone(),
+                ));
+
                 // A UI assina "player" antes de ler o snapshot. Este sinal
                 // cobre o caso em que o mpv so fica pronto depois da leitura.
                 let _ = app_handle.emit("player", serde_json::json!({ "event": "ready" }));

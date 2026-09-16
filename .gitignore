@@ -28,3 +28,20 @@ Thumbs.db
 # Logs
 *.log
 **/rustypipe_reports/
+
+# Recursos de empacotamento baixados no build (Fase 5): o yt-dlp embutido
+# (packaging/fetch-ytdlp.sh / .ps1) e a libmpv-2.dll do Windows
+# (packaging/fetch-mpv-windows.ps1). Os diretórios continuam versionados
+# (com .gitkeep) porque o bundler do Tauri exige que existam mesmo vazios
+# para "npm run tauri build" funcionar sem esses binários.
+/src-tauri/resources/yt-dlp/yt-dlp
+/src-tauri/resources/yt-dlp/yt-dlp.exe
+/src-tauri/resources/windows/*.dll
+
+# Cache do SDK do libmpv baixado pelo fetch-mpv-windows.ps1 (mpv.lib,
+# headers, .7z), quando alguém aponta MPV_WINBUILD_CACHE pra dentro do repo
+# em vez do padrão fora dele.
+/.mpv-winbuild-cache/
+
+# Worktrees que o Claude Code cria para agentes isolados.
+/.claude/worktrees/
