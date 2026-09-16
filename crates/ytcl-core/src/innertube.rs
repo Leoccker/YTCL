@@ -196,50 +196,50 @@ impl ScrubbedStorage {
     fn new(path: PathBuf) -> Self {
         Self { path }
     }
+
+    fn write_sanitized(&self, data: &str) -> std::io::Result<()> {
+        use std::io::Write;
+
+        // Aceitar apenas o objeto esperado. Nunca registrar o erro de parse:
+        // ele pode conter trechos do cookie recebido.
+        let mut value: serde_json::Map<String, serde_json::Value> = serde_json::from_str(data)
+            .map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "cache JSON invalido")
+            })?;
+        value.remove("auth_cookie");
+        value.remove("oauth_token");
+        let scrubbed = serde_json::to_vec(&value).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "cache nao serializavel")
+        })?;
+
+        let dir = self
+            .path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::Path::new("."));
+        std::fs::create_dir_all(dir)?;
+        // tempfile cria com 0600 no Unix. Mesmo diretorio garante que a
+        // substituicao seja atomica; falhas removem o temporario via Drop.
+        let mut file = tempfile::NamedTempFile::new_in(dir)?;
+        file.write_all(&scrubbed)?;
+        file.flush()?;
+        file.as_file().sync_all()?;
+        file.persist(&self.path).map_err(|e| e.error)?;
+        Ok(())
+    }
 }
 
 impl CacheStorage for ScrubbedStorage {
     fn write(&self, data: &str) {
-        let scrubbed = match serde_json::from_str::<serde_json::Value>(data) {
-            Ok(mut v) => {
-                if let Some(obj) = v.as_object_mut() {
-                    obj.remove("auth_cookie");
-                    obj.remove("oauth_token");
-                }
-                serde_json::to_string(&v).unwrap_or_else(|_| data.to_string())
-            }
-            // Se nao for JSON valido, melhor gravar como veio do que perder o
-            // cache inteiro.
-            Err(_) => data.to_string(),
-        };
-
-        if let Some(dir) = self.path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        if let Err(e) = std::fs::write(&self.path, &scrubbed) {
+        if let Err(e) = self.write_sanitized(data) {
             tracing::warn!("nao consegui gravar o cache do rustypipe: {e}");
-            return;
         }
-        restrict_to_owner(&self.path);
     }
 
     fn read(&self) -> Option<String> {
         std::fs::read_to_string(&self.path).ok()
     }
 }
-
-/// So o dono le o cache do rustypipe. Separado por plataforma, e nao um
-/// bloco `#[cfg(unix)]` no fim de `write`: no Windows o bloco some e o
-/// `return` do erro vira o ultimo comando, o que o clippy acusa.
-#[cfg(unix)]
-fn restrict_to_owner(path: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
-}
-
-/// No Windows o perfil do usuario ja tem ACL propria.
-#[cfg(not(unix))]
-fn restrict_to_owner(_path: &Path) {}
 
 // ---------------------------------------------------------------------------
 // Conversao de tipos
@@ -617,6 +617,76 @@ impl MetadataSource for InnerTube {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cache_remove_segredos_e_substitui_metadados() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ScrubbedStorage::new(dir.path().join("cache.json"));
+        for version in [1, 2] {
+            storage.write(
+                &serde_json::json!({
+                    "auth_cookie": "SAPISID=segredo",
+                    "oauth_token": {"access_token": "segredo"},
+                    "client": {"version": version},
+                })
+                .to_string(),
+            );
+            let saved: serde_json::Value = serde_json::from_str(&storage.read().unwrap()).unwrap();
+            assert_eq!(saved, serde_json::json!({"client": {"version": version}}));
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                assert_eq!(
+                    std::fs::metadata(&storage.path)
+                        .unwrap()
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o600
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cache_invalido_nao_chega_ao_disco_nem_substitui_cache_anterior() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = ScrubbedStorage::new(dir.path().join("cache.json"));
+        for invalid in [
+            "SAPISID=segredo",
+            "{\"auth_cookie\":\"segredo\"",
+            "{\"oauth_token\":\"segredo\"",
+            "null",
+            "[]",
+            "[ {\"auth_cookie\":\"segredo\"} ]",
+            "\"SAPISID=segredo\"",
+        ] {
+            storage.write(invalid);
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+            storage.write(r#"{"client":"preservado"}"#);
+            let before = storage.read().unwrap();
+            storage.write(invalid);
+            assert_eq!(storage.read().unwrap(), before);
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+            std::fs::remove_file(&storage.path).unwrap();
+        }
+    }
+
+    #[test]
+    fn cache_limpa_temporario_se_substituicao_falhar() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cache.json");
+        std::fs::create_dir(&path).unwrap();
+        std::fs::write(path.join("anterior"), "preservado").unwrap();
+        let storage = ScrubbedStorage::new(path.clone());
+        assert!(storage.write_sanitized(r#"{"client":"novo"}"#).is_err());
+        assert_eq!(
+            std::fs::read_to_string(path.join("anterior")).unwrap(),
+            "preservado"
+        );
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
 
     #[test]
     fn formata_contagem_em_escalas() {

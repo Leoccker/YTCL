@@ -26,6 +26,7 @@ keyring = "4"
 # gerenciado (ytdlp_manager.rs) — sem isso, um download incompleto ou
 # adulterado vira um executavel rodando sem aviso.
 sha2 = "0.10"
+tempfile = "3"
 
 [dev-dependencies]
 

@@ -94,11 +94,36 @@ Estas sustentam a performance e a segurança. Ver `docs/plano.md` para o porquê
    a frequência.
 4. **O cookie de sessão vai só para o cofre do SO** (`keyring`), nunca para
    arquivo. O `ScrubbedStorage` em `innertube.rs` remove `auth_cookie`/
-   `oauth_token` antes de o rustypipe gravar o cache dele.
+   `oauth_token` antes de gravar. JSON inválido ou raiz que não seja objeto
+   deve ser rejeitado sem gravar nem registrar o conteúdo. Preservar a escrita
+   em temporário exclusivo no mesmo diretório (`0600` desde a criação no Unix),
+   flush/sync, substituição atômica e limpeza do temporário em falhas.
 5. **`ytcl-core`/`ytcl-player` sem dependência de Tauri.**
 6. **Modelos próprios na fronteira do IPC** (`ytcl-core/src/model.rs`,
    `#[serde(rename_all = "camelCase")]`). Não reexportar tipos do rustypipe nem
    do yt-dlp para o frontend.
+
+## Correções de segurança — 16/09/2026
+
+- **TLS corrigido:** o lockfile usa `rustls 0.23.45`, corrigindo
+  `RUSTSEC-2026-0285`. Ao atualizar dependências, preservar uma versão corrigida
+  e executar `cargo audit` com a base atualizada.
+- **Cache corrigido:** preservar as garantias de `ScrubbedStorage` descritas
+  acima e os testes de rejeição, sanitização, permissões e falha de persistência.
+- **Actions fixadas em `claude.yml`:** manter SHA completo com comentário da
+  versão legível. Conferir o commit na tag oficial e atualizar SHA/comentário
+  juntos em PR. Os workflows `ci.yml` e `release.yml`, recebidos do remoto
+  durante o rebase, ainda precisam dessa revisão.
+- **libmpv pendente:** `packaging/fetch-mpv-windows.ps1` e o pipeline Windows
+  foram recebidos do remoto durante o rebase. Fixar tag, asset e SHA-256 no
+  repositório e verificar o hash antes de extrair ou carregar, inclusive para
+  arquivos em cache. Essa correção permanece pendente.
+
+Validação após o rebase no Linux: 72 testes passaram, 11 ignorados;
+Clippy com `-D warnings` e Svelte sem erros. Auditoria sem vulnerabilidades,
+com sete avisos transitivos (seis de manutenção e um de unsoundness em `glib`).
+Windows não foi validado. Ao retomar a revisão de segurança, consultar o estado
+por item em `possiveis correções.md`, se disponível localmente.
 
 ## Resolução de stream: rustypipe vs yt-dlp
 
