@@ -56,7 +56,7 @@ perfil de risco de "um binário na minha máquina" do de "um serviço público" 
 | 2 — Autenticação | **concluída** (2026-09-10) |
 | 3 — Reprodução | **concluída** (2026-09-10) |
 | 4 — UI completa | **concluída** (2026-09-14) |
-| 5 — Empacotamento | próxima |
+| 5 — Empacotamento | em validação (falta o CI do Windows) |
 
 **Fase 0** entregou o workspace Cargo com `ytcl-core` e `ytcl-player`, o crate
 Tauri com o protocolo `ytmart://`, o frontend Svelte 5 + Vite, a config em TOML
@@ -84,6 +84,14 @@ expirada) e a barra do player.
 título/artista clicáveis, mudo e atalho para a fila, skeletons/estados
 vazios/erros inline em todas as telas e os atalhos de teclado (Espaço, ←/→
 seek, Ctrl+←/→ faixa, Ctrl+↑/↓ volume, Alt+←/→ voltar/avançar, Ctrl+F, Ctrl+L).
+
+**Fase 5** entregou os pacotes Linux (`.deb`, `.rpm`, AppImage, verificados por
+dentro), a config de MSI/NSIS, o `yt-dlp` embutido com cópia gerenciada em
+`<data_local_dir>/bin` e atualização diária conferida por checksum
+(`crates/ytcl-core/src/ytdlp_manager.rs`, `ytdlp_path` no config), o libmpv do
+Windows (`packaging/fetch-mpv-windows.ps1`), a mitigação de GPU NVIDIA
+(`src-tauri/src/graphics.rs`), o metainfo AppStream e os workflows de CI e de
+release. Falta ver o build Windows passar no CI.
 
 ### Correções de rota
 
@@ -149,6 +157,25 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
   pela própria resposta do YouTube (dezenas de itens); a página rola inteira.
   Listas sem teto (playlist, curtidas, busca, fila grande) seguem
   virtualizadas. *(Fase 4)*
+- **A mitigação NVIDIA não é um wrapper `packaging/ytcl.sh`.** Ela roda no
+  próprio processo, no começo do `main()` (`src-tauri/src/graphics.rs`), e por
+  isso vale igual para deb, rpm e AppImage sem reescrever o `Exec=` de cada um.
+  `YTCL_GPU_WORKAROUND=auto|off|force` controla o comportamento. *(Fase 5)*
+- **Ubuntu 22.04 não compila o app.** Ele só tem `libmpv.so.1`, e o crate
+  `libmpv2` exige `libmpv.so.2`. O CI e o release usam `ubuntu-24.04`, e o deb
+  depende só de `libmpv2` (Debian 12+, Ubuntu 23.04+). *(Fase 5)*
+- **O pacote de desenvolvimento do libmpv do shinchiro não traz mais o `.def`.**
+  O `fetch-mpv-windows.ps1` gera o `.def` a partir dos exports da própria DLL
+  (`dumpbin /exports`) antes de criar o `mpv.lib`. *(Fase 5)*
+- **Os diretórios de recursos são versionados com `.gitkeep`.** O `tauri-build`
+  recusa compilar se o caminho de um recurso não existe; com o diretório
+  presente, o build sem o `yt-dlp` baixado continua funcionando. *(Fase 5)*
+- **A cópia gerenciada do `yt-dlp` fica em `data_local_dir`, não em `data_dir`.**
+  No Windows o `data_dir` é `AppData\Roaming`, que perfis de rede sincronizam;
+  um executável de ~35 MB não deve ir junto. *(Fase 5)*
+- **O AppImage passa de 190 MB.** O linuxdeploy leva a árvore inteira de
+  dependências do libmpv da máquina de build (ffmpeg, codecs, gstreamer).
+  Cortar isso exige uma lista de exclusões própria; fica para depois. *(Fase 5)*
 
 ---
 
