@@ -9,11 +9,24 @@
 //! Custo: ~1–2 s por chamada (startup do yt-dlp + rede). A pré-resolução da
 //! próxima faixa (~20 s antes do fim) esconde isso no gapless.
 
+use std::time::Duration;
+
 use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::error::{CoreError, Result};
 use crate::stream::{AudioCodec, ResolvedStream, StreamResolver};
+
+/// Prazo do subprocesso. Uma resolução leva 1–2 s; passando disto o yt-dlp
+/// está pendurado (rede morta, servidor sem resposta) e o player precisa
+/// saber disso em vez de ficar esperando para sempre.
+const RESOLVE_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Prazo do `--version` da inicialização, que é local e instantâneo.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Prazo da sonda de tamanho — uma requisição de um byte.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct YtDlp {
     /// Caminho do binário. `yt-dlp` (do PATH) por padrão — ver
@@ -40,17 +53,27 @@ impl YtDlp {
     fn command(&self) -> tokio::process::Command {
         let mut cmd = tokio::process::Command::new(&self.binary);
         no_window(&mut cmd);
+        // Quem chama pode desistir (prazo estourado ou faixa trocada). Sem
+        // isto o yt-dlp sobreviveria ao futuro largado, baixando à toa.
+        cmd.kill_on_drop(true);
         cmd
+    }
+
+    /// Erro de prazo estourado, com o texto que vai aparecer na barra.
+    fn timed_out(&self, what: &str, limit: Duration) -> CoreError {
+        CoreError::Network(format!(
+            "o yt-dlp não respondeu {what} em {} s ({})",
+            limit.as_secs(),
+            self.binary
+        ))
     }
 
     /// Confere que o binário responde. Chamado na inicialização para o app
     /// avisar cedo se falta o yt-dlp.
     pub async fn check(&self) -> Result<String> {
-        let out = self
-            .command()
-            .arg("--version")
-            .output()
+        let out = tokio::time::timeout(CHECK_TIMEOUT, self.command().arg("--version").output())
             .await
+            .map_err(|_| self.timed_out("ao conferir a versão", CHECK_TIMEOUT))?
             .map_err(|e| self.not_found_error(e))?;
         if !out.status.success() {
             return Err(CoreError::Other("yt-dlp --version falhou".into()));
@@ -142,9 +165,11 @@ fn parse_content_range(value: &str) -> Option<(u64, u64, u64)> {
 /// fechado evita baixar a faixa inteira e o `206` impede aceitar servidores
 /// que ignoram Range e respondem o arquivo começando no byte zero.
 async fn probe_size(url: &str, user_agent: Option<&str>) -> Result<u64> {
-    let mut request = reqwest::Client::new()
-        .get(url)
-        .header(reqwest::header::RANGE, "bytes=0-0");
+    let client = reqwest::Client::builder()
+        .timeout(PROBE_TIMEOUT)
+        .build()
+        .map_err(|e| CoreError::Network(format!("criando cliente HTTP da sonda: {e}")))?;
+    let mut request = client.get(url).header(reqwest::header::RANGE, "bytes=0-0");
     if let Some(user_agent) = user_agent.filter(|ua| !ua.is_empty()) {
         request = request.header(reqwest::header::USER_AGENT, user_agent);
     }
@@ -186,20 +211,23 @@ fn size_from_probe_response(
 impl StreamResolver for YtDlp {
     async fn resolve(&self, video_id: &str) -> Result<ResolvedStream> {
         // videoId puro é aceito pelo yt-dlp. `--` encerra as flags.
-        let out = self
-            .command()
-            .args([
-                "-J",
-                "--no-warnings",
-                "--no-playlist",
-                "-f",
-                "bestaudio[acodec=opus]/bestaudio",
-                "--",
-                video_id,
-            ])
-            .output()
-            .await
-            .map_err(|e| self.not_found_error(e))?;
+        let out = tokio::time::timeout(
+            RESOLVE_TIMEOUT,
+            self.command()
+                .args([
+                    "-J",
+                    "--no-warnings",
+                    "--no-playlist",
+                    "-f",
+                    "bestaudio[acodec=opus]/bestaudio",
+                    "--",
+                    video_id,
+                ])
+                .output(),
+        )
+        .await
+        .map_err(|_| self.timed_out("ao resolver a faixa", RESOLVE_TIMEOUT))?
+        .map_err(|e| self.not_found_error(e))?;
 
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
