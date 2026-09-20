@@ -109,6 +109,18 @@ impl Player {
         self.change_current(|queue| queue.set(tracks, start)).await
     }
 
+    /// "Aleatório" das telas de álbum/playlist: sorteia `start` para abrir e
+    /// embaralha o resto atrás dela.
+    ///
+    /// Uma operação só de propósito. Ligar o aleatório e trocar a fila em
+    /// duas chamadas deixa um intervalo em que a fila nova está com a
+    /// ordenação antiga (ou o contrário), e quem clica duas vezes rápido vê
+    /// o resultado de metade de cada uma.
+    pub async fn play_shuffled(&self, tracks: Vec<Track>, start: usize) -> anyhow::Result<()> {
+        self.change_current(|queue| queue.set_shuffled(tracks, start))
+            .await
+    }
+
     pub async fn toggle_pause(&self) -> anyhow::Result<()> {
         let _operation = self.operations.lock().await;
         let playing = matches!(self.inner.lock().state, PlaybackState::Playing);

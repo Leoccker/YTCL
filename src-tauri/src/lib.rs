@@ -73,6 +73,7 @@ pub fn run() {
             commands::library_artists,
             commands::liked_songs,
             commands::player_play_tracks,
+            commands::player_play_shuffled,
             commands::player_toggle,
             commands::player_next,
             commands::player_prev,
