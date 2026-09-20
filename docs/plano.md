@@ -177,6 +177,12 @@ Registradas aqui porque contradizem o que as seções abaixo diziam antes:
 - **O pacote de desenvolvimento do libmpv do shinchiro não traz mais o `.def`.**
   O `fetch-mpv-windows.ps1` gera o `.def` a partir dos exports da própria DLL
   (`dumpbin /exports`) antes de criar o `mpv.lib`. *(Fase 5)*
+- **O pacote do libmpv é fixado por tag, nome e SHA-256 no próprio script.**
+  Consultar `releases/latest` fazia o mesmo commit produzir binários
+  diferentes, e o arquivo em cache era aceito só por existir. Hoje o hash é
+  conferido antes de qualquer extração — inclusive no cache — e trocar de
+  release significa atualizar os três valores juntos, num PR à parte.
+  *(20/09/2026)*
 - **Os diretórios de recursos são versionados com `.gitkeep`.** O `tauri-build`
   recusa compilar se o caminho de um recurso não existe; com o diretório
   presente, o build sem o `yt-dlp` baixado continua funcionando. *(Fase 5)*

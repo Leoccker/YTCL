@@ -114,10 +114,14 @@ Estas sustentam a performance e a segurança. Ver `docs/plano.md` para o porquê
   versão legível. Conferir o commit na tag oficial e atualizar SHA/comentário
   juntos em PR. Os workflows `ci.yml` e `release.yml`, recebidos do remoto
   durante o rebase, ainda precisam dessa revisão.
-- **libmpv pendente:** `packaging/fetch-mpv-windows.ps1` e o pipeline Windows
-  foram recebidos do remoto durante o rebase. Fixar tag, asset e SHA-256 no
-  repositório e verificar o hash antes de extrair ou carregar, inclusive para
-  arquivos em cache. Essa correção permanece pendente.
+- **libmpv fixado (20/09/2026):** `packaging/fetch-mpv-windows.ps1` não
+  consulta mais `releases/latest`. Tag, nome do asset e SHA-256 estão fixados
+  no topo do script; o hash é conferido antes de qualquer extração, inclusive
+  quando o arquivo já está no cache (um `.7z` adulterado é removido e o script
+  aborta). O download vai para um temporário exclusivo e só é promovido depois
+  de conferido, e `7z`, `dumpbin` e `lib.exe` têm o código de saída validado.
+  Ao trocar de release, atualizar os três valores juntos. O pipeline Windows
+  ainda não foi executado.
 
 Validação após o rebase no Linux: 72 testes passaram, 11 ignorados;
 Clippy com `-D warnings` e Svelte sem erros. Auditoria sem vulnerabilidades,
