@@ -175,7 +175,13 @@ impl Backend for MpvBackend {
     async fn append(&self, stream: &ResolvedStream, gain_db: Option<f64>) -> anyhow::Result<()> {
         let _ = gain_db; // aplicado quando a faixa vira a atual
         let uri = spec_uri(stream);
-        cmd(self.mpv.command("loadfile", &[&uri, "append"]), "loadfile append")
+        // Se a faixa acabar entre a resolução e este comando, append-play
+        // também inicia a próxima quando o mpv já ficou ocioso.
+        cmd(self.mpv.command("loadfile", &[&uri, "append-play"]), "loadfile append-play")
+    }
+
+    async fn clear_next(&self) -> anyhow::Result<()> {
+        cmd(self.mpv.command("playlist-clear", &[]), "playlist-clear")
     }
 
     async fn play(&self) -> anyhow::Result<()> {

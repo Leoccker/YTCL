@@ -43,6 +43,9 @@ jobs:
       - name: Instala dependências do frontend
         run: npm ci
 
+      - name: Testa isolamento da biblioteca por conta
+        run: npm test
+
       # tauri::generate_context!() exige que ../dist exista em tempo de
       # compilação (build.rs falha sem isso) — o build do frontend precisa
       # rodar antes de qualquer cargo clippy/test. `npm run build` já roda o
@@ -78,6 +81,9 @@ jobs:
 
       - name: Instala dependências do frontend
         run: npm ci
+
+      - name: Testa isolamento da biblioteca por conta
+        run: npm test
 
       - name: Build do frontend (Svelte)
         run: npm run build

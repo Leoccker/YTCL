@@ -26,12 +26,14 @@ pub trait Backend: Send + Sync + 'static {
         gain_db: Option<f64>,
     ) -> anyhow::Result<()>;
     /// Enfileira a proxima faixa sem interromper a atual — e isso que
-    /// produz o gapless de verdade.
+    /// produz o gapless de verdade. Se a atual já terminou, inicia a próxima.
     async fn append(
         &self,
         stream: &ytcl_core::stream::ResolvedStream,
         gain_db: Option<f64>,
     ) -> anyhow::Result<()>;
+    /// Remove a pré-carga, preservando somente a faixa em reprodução.
+    async fn clear_next(&self) -> anyhow::Result<()>;
     async fn play(&self) -> anyhow::Result<()>;
     async fn pause(&self) -> anyhow::Result<()>;
     async fn seek(&self, secs: f64) -> anyhow::Result<()>;

@@ -15,9 +15,9 @@ type St<'a> = State<'a, Arc<AppState>>;
 type R<T> = std::result::Result<T, ErrorPayload>;
 
 fn player(state: &Arc<AppState>) -> R<Arc<ytcl_player::Player>> {
-    state
-        .player()
-        .ok_or_else(|| CoreError::Other("reprodução indisponível (libmpv não carregou)".into()).into())
+    state.player().ok_or_else(|| {
+        CoreError::Other("reprodução indisponível (libmpv não carregou)".into()).into()
+    })
 }
 
 /// Registra as capas das faixas antes de tocar — o `ytmart://` precisa do
@@ -61,40 +61,38 @@ pub async fn player_set_volume(state: St<'_>, level: f64) -> R<()> {
 }
 
 #[tauri::command]
-pub fn player_set_repeat(state: St<'_>, mode: RepeatMode) -> R<()> {
-    player(&state)?.set_repeat(mode);
-    Ok(())
+pub async fn player_set_repeat(state: St<'_>, mode: RepeatMode) -> R<()> {
+    player(&state)?.set_repeat(mode).await.map_err(wrap)
 }
 
 #[tauri::command]
-pub fn player_set_shuffle(state: St<'_>, on: bool) -> R<()> {
-    player(&state)?.set_shuffle(on);
-    Ok(())
+pub async fn player_set_shuffle(state: St<'_>, on: bool) -> R<()> {
+    player(&state)?.set_shuffle(on).await.map_err(wrap)
 }
 
 #[tauri::command]
-pub fn player_play_next(state: St<'_>, track: Track) -> R<()> {
+pub async fn player_play_next(state: St<'_>, track: Track) -> R<()> {
     remember_tracks(&state, std::slice::from_ref(&track));
-    player(&state)?.play_next(track);
-    Ok(())
+    player(&state)?.play_next(track).await.map_err(wrap)
 }
 
 #[tauri::command]
-pub fn player_enqueue(state: St<'_>, track: Track) -> R<()> {
+pub async fn player_enqueue(state: St<'_>, track: Track) -> R<()> {
     remember_tracks(&state, std::slice::from_ref(&track));
-    player(&state)?.enqueue(track);
-    Ok(())
+    player(&state)?.enqueue(track).await.map_err(wrap)
 }
 
 #[tauri::command]
-pub fn player_move_queue(state: St<'_>, from: usize, to: usize) -> R<()> {
-    player(&state)?.move_in_queue(from, to);
-    Ok(())
+pub async fn player_move_queue(state: St<'_>, from: usize, to: usize) -> R<()> {
+    player(&state)?.move_in_queue(from, to).await.map_err(wrap)
 }
 
 #[tauri::command]
 pub async fn player_jump_queue(state: St<'_>, order_index: usize) -> R<()> {
-    player(&state)?.jump_in_queue(order_index).await.map_err(wrap)
+    player(&state)?
+        .jump_in_queue(order_index)
+        .await
+        .map_err(wrap)
 }
 
 #[tauri::command]
@@ -111,4 +109,3 @@ pub fn player_available(state: St<'_>) -> bool {
 fn wrap(e: anyhow::Error) -> ErrorPayload {
     CoreError::Other(e.to_string()).into()
 }
-

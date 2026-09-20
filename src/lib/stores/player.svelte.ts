@@ -159,8 +159,12 @@ class PlayerState {
    */
   playShuffled(tracks: Track[]) {
     if (tracks.length === 0) return;
-    if (!this.shuffled) this.toggleShuffle();
-    this.play(tracks, Math.floor(Math.random() * tracks.length));
+    // O comando de shuffle agora aguarda a limpeza da pré-carga no mpv.
+    // A nova fila só pode começar depois que essa alteração for aplicada.
+    this.guard(playerSetShuffle(true).then(() => {
+      this.shuffled = true;
+      this.play(tracks, Math.floor(Math.random() * tracks.length));
+    }));
   }
 
   toggle() {

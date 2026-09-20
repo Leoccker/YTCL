@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import Login from "./Login.svelte";
   import MediaCard from "../components/MediaCard.svelte";
   import TrackList from "../components/TrackList.svelte";
@@ -63,6 +64,32 @@
     liked: 0,
   };
 
+  // A identidade da conta faz parte da validade de cada resposta.
+  let sessionAccountId: string | null = null;
+
+  function activeAccountId(): string | null {
+    return auth.session.kind === "active" ? auth.session.account.id : null;
+  }
+
+  function syncSession(accountId: string | null) {
+    if (accountId === sessionAccountId) return;
+    sessionAccountId = accountId;
+    playlists = [];
+    albums = [];
+    artists = [];
+    liked = [];
+    likedCont = null;
+    for (const k of Object.keys(st) as Tab[]) {
+      epoch[k]++;
+      st[k] = { loading: false, error: null, loaded: false };
+    }
+  }
+
+  function isCurrent(t: Tab, version: number, accountId: string | null) {
+    return epoch[t] === version && sessionAccountId === accountId
+      && activeAccountId() === accountId;
+  }
+
   interface CardItem {
     id: string;
     art: ArtRef | null;
@@ -98,8 +125,10 @@
   }
 
   async function load(t: Tab, force = false) {
+    const accountId = activeAccountId();
+    syncSession(accountId);
     const s = st[t];
-    if (!auth.loggedIn || s.loading || (s.loaded && !force)) return;
+    if (!accountId || s.loading || (s.loaded && !force)) return;
 
     const mine = ++epoch[t];
     s.loading = true;
@@ -108,42 +137,46 @@
     try {
       if (t === "playlists") {
         const r = await libraryPlaylists();
-        if (epoch[t] !== mine) return;
+        if (!isCurrent(t, mine, accountId)) return;
         playlists = r;
       } else if (t === "albums") {
         const r = await libraryAlbums();
-        if (epoch[t] !== mine) return;
+        if (!isCurrent(t, mine, accountId)) return;
         albums = r;
       } else if (t === "artists") {
         const r = await libraryArtists();
-        if (epoch[t] !== mine) return;
+        if (!isCurrent(t, mine, accountId)) return;
         artists = r;
       } else {
         const page = await likedSongs();
-        if (epoch[t] !== mine) return;
+        if (!isCurrent(t, mine, accountId)) return;
         liked = page.items;
         likedCont = page.continuation;
       }
       s.loaded = true;
     } catch (e) {
-      if (epoch[t] === mine) s.error = errorMessage(e);
+      if (isCurrent(t, mine, accountId)) s.error = errorMessage(e);
     } finally {
-      if (epoch[t] === mine) s.loading = false;
+      if (isCurrent(t, mine, accountId)) s.loading = false;
     }
   }
 
   async function moreLiked() {
+    const accountId = activeAccountId();
+    syncSession(accountId);
     const s = st.liked;
-    if (!likedCont || s.loading) return;
+    if (!accountId || !likedCont || s.loading) return;
+    const mine = ++epoch.liked;
     s.loading = true;
     try {
       const page = await likedSongs(likedCont);
+      if (!isCurrent("liked", mine, accountId)) return;
       liked = [...liked, ...page.items];
       likedCont = page.continuation;
     } catch (e) {
-      s.error = errorMessage(e);
+      if (isCurrent("liked", mine, accountId)) s.error = errorMessage(e);
     } finally {
-      s.loading = false;
+      if (isCurrent("liked", mine, accountId)) s.loading = false;
     }
   }
 
@@ -159,25 +192,15 @@
     else if (t === "artists") router.push({ name: "artist", id });
   }
 
-  // Sessão nova (login/reconexão): zera tudo e recarrega a aba atual.
-  let hadSession = false;
   $effect(() => {
-    if (auth.loggedIn && !hadSession) {
-      playlists = [];
-      albums = [];
-      artists = [];
-      liked = [];
-      for (const k of Object.keys(st) as Tab[]) {
-        st[k] = { loading: false, error: null, loaded: false };
-      }
-      load(tab, true);
-    }
-    hadSession = auth.loggedIn;
-  });
-
-  $effect(() => {
-    void tab;
-    load(tab);
+    const accountId = activeAccountId();
+    const selectedTab = tab;
+    // Não assinar loading/loaded: a conclusão de uma tentativa não deve
+    // disparar outra automaticamente nem criar um ciclo em caso de erro.
+    untrack(() => {
+      syncSession(accountId);
+      if (accountId) void load(selectedTab);
+    });
   });
 </script>
 

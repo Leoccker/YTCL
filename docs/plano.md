@@ -97,6 +97,16 @@ release. Falta ver o build Windows passar no CI.
 
 Registradas aqui porque contradizem o que as seções abaixo diziam antes:
 
+- **Seleções de faixa e pré-carga têm gerações e aplicação serializada.**
+  Uma resolução antiga não pode substituir a seleção mais recente. Alterações
+  de fila removem a próxima faixa da playlist do mpv antes de aplicar a nova
+  ordem, e a recuperação invalida a pré-carga removida por `loadfile replace`.
+  Operações de rede ficam fora da trava e do consumidor de eventos. Ao trocar
+  manualmente de faixa, o áudio anterior para enquanto a nova URL resolve;
+  a transição automática continua usando a pré-carga. A biblioteca invalida
+  listas, cursores e pedidos pendentes pela identidade da conta, inclusive em
+  troca direta entre contas ativas. *(Correções de 19/09/2026)*
+
 - **O medidor de memória somava RSS da árvore de processos**, contando as
   bibliotecas compartilhadas uma vez por processo. Passou a medir PSS, com RSS
   ao lado. *(Fase 0)*
