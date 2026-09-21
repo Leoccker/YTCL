@@ -76,7 +76,7 @@ YTCL_MPV_LOG=/tmp/mpv.log ./target/release/ytcl     # log interno do mpv
 ## Dependências de sistema (dev)
 
 Fedora: `webkit2gtk4.1-devel openssl-devel librsvg2-devel mpv-libs-devel gcc gcc-c++ make`
-Mais: Rust (rustup), Node 20+ e **`yt-dlp` no PATH** para rodar em
+Mais: Rust (rustup), Node 22+ e **`yt-dlp` no PATH** para rodar em
 desenvolvimento. O app empacotado traz a própria cópia; para embuti-la num build
 local, rode `bash packaging/fetch-ytdlp.sh` antes do `tauri build`.
 
