@@ -250,6 +250,9 @@ export const playerSnapshot = () =>
 
 export const playTracks = (tracks: Track[], start: number) =>
   invoke<void>("player_play_tracks", { tracks, start });
+/** Toca a fila inteira embaralhada, abrindo por `start`. Uma chamada só. */
+export const playShuffled = (tracks: Track[], start: number) =>
+  invoke<void>("player_play_shuffled", { tracks, start });
 export const playerToggle = () => invoke<void>("player_toggle");
 export const playerNext = () => invoke<void>("player_next");
 export const playerPrev = () => invoke<void>("player_prev");

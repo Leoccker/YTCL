@@ -17,10 +17,27 @@
 # ver tauri.windows.conf.json); o resto (mpv.lib, headers, cache do
 # download) fica fora do git, so interessa durante o build.
 #
+# O pacote e fixado por tag, nome e SHA-256 (ver "Pino" abaixo): esta DLL e
+# carregada dentro do processo do app, entao o build do mesmo commit tem que
+# produzir sempre o mesmo binario, e nada e extraido antes do hash bater.
+#
 # Requer PowerShell 7+ (pwsh), 7z no PATH (o runner windows-latest do GitHub
 # Actions ja vem com ele) e as "Desktop development with C++" do Visual
 # Studio / Build Tools (para o lib.exe e o dumpbin.exe).
 $ErrorActionPreference = 'Stop'
+
+# --- Pino da dependencia -------------------------------------------------
+# Os tres valores mudam juntos, num PR a parte, depois de conferir o hash.
+# Como atualizar (a variante "-v3" e otimizada pra AVX2; queremos a generica):
+#
+#   gh api repos/shinchiro/mpv-winbuild-cmake/releases/latest --jq `
+#     '.tag_name, (.assets[] | select(.name | test("^mpv-dev-x86_64-[^v].*\\.7z$")) | .name, .digest)'
+#
+# O `digest` vem da propria API do GitHub; confirme baixando o arquivo e
+# rodando `(Get-FileHash <arquivo> -Algorithm SHA256).Hash.ToLower()`.
+$MpvTag = '20260920'
+$MpvAsset = 'mpv-dev-x86_64-20260920-git-e76a35ec95.7z'
+$MpvSha256 = '60f9102db46aea8cef9bfb4345ee6a106f34fdbd1df9587e38f0660688039341'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RootDir = Split-Path -Parent $ScriptDir
@@ -30,6 +47,32 @@ $ResourcesDir = Join-Path $RootDir 'src-tauri/resources/windows'
 
 New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ResourcesDir | Out-Null
+
+function Get-Sha256 {
+    param([string]$Path)
+
+    return (Get-FileHash -Path $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Invoke-Checked {
+    # Roda um executavel e transforma codigo de saida diferente de zero em
+    # erro. Sem isto, um 7z ou um lib.exe que falha passa despercebido e o
+    # build segue com o que sobrou da rodada anterior.
+    param(
+        [string]$Exe,
+        [string[]]$Arguments,
+        [string]$What
+    )
+
+    # Sem `2>&1`: com $ErrorActionPreference='Stop' a mistura dos fluxos de
+    # um executavel externo vira erro terminante por qualquer aviso. O stderr
+    # segue visivel no log; o que decide aqui e o codigo de saida.
+    $output = & $Exe @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "erro: $What falhou (codigo $LASTEXITCODE)"
+    }
+    return $output
+}
 
 function Get-VCTool {
     # Acha uma ferramenta do toolchain MSVC (lib.exe, dumpbin.exe, ...):
@@ -60,24 +103,45 @@ function Get-VCTool {
     return $found.FullName
 }
 
-# --- Acha o asset "mpv-dev-x86_64-*.7z" (sem "-v3") na ultima release ---
-Write-Host 'Consultando a ultima release do mpv-winbuild-cmake...'
-$release = Invoke-RestMethod -Uri 'https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest' -Headers @{ 'User-Agent' = 'ytcl-packaging' }
-# "-v3" e a variante otimizada pra x86-64-v3 (AVX2); queremos a generica.
-$asset = $release.assets |
-    Where-Object { $_.name -match '^mpv-dev-x86_64-.*\.7z$' -and $_.name -notmatch '-v3' } |
-    Select-Object -First 1
-if (-not $asset) {
-    throw 'erro: nao achei o asset mpv-dev-x86_64-*.7z (sem -v3) na ultima release'
-}
+# --- Baixa o asset fixado e confere o SHA-256 ---
+$DownloadUrl = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/$MpvTag/$MpvAsset"
+$ArchivePath = Join-Path $CacheDir $MpvAsset
 
-$ArchivePath = Join-Path $CacheDir $asset.name
-if (-not (Test-Path $ArchivePath)) {
-    Write-Host "Baixando $($asset.name)..."
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $ArchivePath
+if (Test-Path $ArchivePath) {
+    # O cache e um diretorio comum do usuario, gravavel por qualquer processo
+    # dele: conferir o hash aqui e o que impede um .7z trocado virar uma DLL
+    # carregada dentro do app. Nada e extraido antes desta checagem.
+    $cached = Get-Sha256 -Path $ArchivePath
+    if ($cached -ne $MpvSha256) {
+        Remove-Item -Force $ArchivePath
+        throw ("erro: o $MpvAsset em cache nao confere com o pino.`n" +
+               "  esperado: $MpvSha256`n" +
+               "  obtido:   $cached`n" +
+               'O arquivo foi removido do cache. Rode o script de novo para baixar outra vez; se repetir, revise o pino.')
+    }
+    Write-Host "Ja em cache e conferido: $ArchivePath"
 }
 else {
-    Write-Host "Ja em cache: $ArchivePath"
+    Write-Host "Baixando $MpvAsset ($MpvTag)..."
+    # Baixa para um temporario exclusivo e so promove depois de conferir:
+    # assim o cache nunca chega a guardar um arquivo nao verificado, nem
+    # duas execucoes simultaneas escrevem no mesmo destino.
+    $Partial = Join-Path $CacheDir ('{0}.{1}.part' -f $MpvAsset, [guid]::NewGuid().ToString('n'))
+    try {
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $Partial -Headers @{ 'User-Agent' = 'ytcl-packaging' }
+        $got = Get-Sha256 -Path $Partial
+        if ($got -ne $MpvSha256) {
+            throw ("erro: o download de $MpvAsset nao confere com o pino.`n" +
+                   "  esperado: $MpvSha256`n" +
+                   "  obtido:   $got")
+        }
+        Move-Item -Force -Path $Partial -Destination $ArchivePath
+    }
+    finally {
+        if (Test-Path $Partial) {
+            Remove-Item -Force $Partial
+        }
+    }
 }
 
 # --- Extrai ---
@@ -91,7 +155,7 @@ $SevenZip = Get-Command '7z' -ErrorAction SilentlyContinue
 if (-not $SevenZip) {
     throw 'erro: 7z nao encontrado no PATH (o runner windows-latest do GitHub Actions ja vem com ele)'
 }
-& $SevenZip.Source x $ArchivePath "-o$ExtractDir" -y | Out-Null
+Invoke-Checked -Exe $SevenZip.Source -Arguments @('x', $ArchivePath, "-o$ExtractDir", '-y') -What '7z x' | Out-Null
 
 $Dll = Get-ChildItem -Path $ExtractDir -Recurse -Filter 'libmpv-2.dll' | Select-Object -First 1
 if (-not $Dll) {
@@ -109,7 +173,7 @@ if ($DefFile) {
 else {
     Write-Host 'Nenhum .def no pacote - gerando a partir dos exports da DLL...'
     $DumpbinExe = Get-VCTool -Name 'dumpbin.exe'
-    $dumpOutput = & $DumpbinExe '/exports' $Dll.FullName
+    $dumpOutput = Invoke-Checked -Exe $DumpbinExe -Arguments @('/exports', $Dll.FullName) -What 'dumpbin /exports'
 
     # Linhas da tabela de exports do dumpbin: "  <ordinal>  <hint(hex)>  <RVA(hex)>  <nome>"
     $exports = foreach ($line in $dumpOutput) {
@@ -131,15 +195,20 @@ else {
 }
 
 $LibOut = Join-Path $CacheDir 'mpv.lib'
+# Apaga antes: senao um lib.exe que falhou deixaria o mpv.lib da rodada
+# anterior no lugar, e o link usaria uma biblioteca de outra versao.
+if (Test-Path $LibOut) {
+    Remove-Item -Force $LibOut
+}
 Push-Location $CacheDir
 try {
-    & $LibExe "/def:$DefPath" '/machine:x64' "/out:$LibOut" | Out-Null
+    Invoke-Checked -Exe $LibExe -Arguments @("/def:$DefPath", '/machine:x64', "/out:$LibOut") -What 'lib.exe /def' | Out-Null
 }
 finally {
     Pop-Location
 }
 if (-not (Test-Path $LibOut)) {
-    throw 'erro: geracao do mpv.lib falhou'
+    throw 'erro: lib.exe terminou sem erro mas nao produziu o mpv.lib'
 }
 
 # --- Exporta as variaveis pro resto do build ---
@@ -156,4 +225,4 @@ if ($env:GITHUB_PATH) {
 }
 
 Write-Host "MPV_LIB_DIR=$CacheDir"
-Write-Host "DLL copiada para $ResourcesDir"
+Write-Host "DLL copiada para $ResourcesDir (libmpv $MpvTag)"

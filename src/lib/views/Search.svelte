@@ -68,10 +68,19 @@
    */
   async function run(refresh = false, silent = false, termo = query.trim(), f = filter) {
     if (!termo) {
+      // Campo vazio também é uma busca: sem subir a geração, a resposta da
+      // busca anterior chegaria depois e repovoaria a tela já limpa. Os
+      // indicadores de carregamento vão junto, senão fica um skeleton que
+      // nunca termina.
+      epoch++;
       items = [];
       continuation = null;
       searched = false;
       error = null;
+      moreError = null;
+      loading = false;
+      loadingMore = false;
+      lastTerm = "";
       return;
     }
 

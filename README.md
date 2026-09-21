@@ -86,7 +86,7 @@ PowerShell 7 e 7-Zip. O libmpv vem do build do shinchiro: num "Developer
 PowerShell", `pwsh packaging/fetch-mpv-windows.ps1` baixa a DLL, gera o
 `mpv.lib` e define `MPV_LIB_DIR` para o cargo.
 
-Além disso: [Rust](https://rustup.rs) e Node 20+.
+Além disso: [Rust](https://rustup.rs) e Node 22+.
 
 **`yt-dlp`**: os pacotes trazem a própria cópia, instalada em
 `~/.local/share/ytcl/bin` (Windows: `%LOCALAPPDATA%\ytcl\ytcl\data\bin`) e

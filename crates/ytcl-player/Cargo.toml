@@ -19,3 +19,8 @@ libc = "0.2.189"
 base64 = "0.23.1"
 serde_json.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "stream"] }
+
+[dev-dependencies]
+# `test-util` dá o relógio controlado (`start_paused`, `time::advance`) que os
+# testes de prazo e de espera entre tentativas usam em `player_tests.rs`.
+tokio = { workspace = true, features = ["test-util"] }

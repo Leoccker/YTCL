@@ -10,11 +10,18 @@
 //! Disciplina de lock: o `parking_lot::Mutex` de `Inner` nunca é segurado
 //! através de um `.await`. Cada método lê o que precisa, solta o lock, e só
 //! então chama a rede ou o mpv.
+//!
+//! Disciplina de resolução: toda chamada ao resolvedor passa por
+//! [`Player::resolve_with_deadline`], que impõe prazo e desiste assim que uma
+//! invalidação torna o pedido inútil. Sem isso um `yt-dlp` pendurado deixaria
+//! a faixa em "carregando" para sempre e seguraria o processo vivo à toa.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use parking_lot::Mutex;
-use tokio::sync::{mpsc, Mutex as AsyncMutex};
+use tokio::sync::{mpsc, watch, Mutex as AsyncMutex};
+use tokio::time::Instant;
 use ytcl_core::model::Track;
 use ytcl_core::stream::{ResolvedStream, StreamResolver};
 
@@ -24,6 +31,51 @@ use crate::{Backend, BackendEvent};
 
 /// Faltando isto (em segundos) para o fim, pré-resolve a próxima.
 const PREFETCH_LEAD_SECS: f64 = 20.0;
+
+/// Prazo de uma resolução. O `yt-dlp` normalmente leva 1–2 s; passando disto
+/// ele travou (rede morta, captcha, binário esperando entrada) e insistir só
+/// mantém a faixa em "carregando". O resolvedor mantém um prazo próprio, mais
+/// curto; este é a rede de segurança do orquestrador.
+const RESOLVE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Primeira espera depois que a pré-resolução de uma faixa falha. Dobra a
+/// cada nova falha da mesma faixa até `PREFETCH_RETRY_MAX`.
+const PREFETCH_RETRY_BASE: Duration = Duration::from_secs(3);
+
+/// Teto da espera progressiva.
+const PREFETCH_RETRY_MAX: Duration = Duration::from_secs(120);
+
+/// Espera progressiva da pré-resolução que falhou.
+///
+/// Sem ela, uma faixa indisponível é tentada de novo a cada evento de posição
+/// (~4 Hz) durante os últimos 20 segundos — dezenas de processos `yt-dlp`
+/// para a mesma resposta negativa.
+struct PrefetchRetry {
+    video_id: String,
+    failures: u32,
+    retry_at: Instant,
+}
+
+/// Espera antes da `n`-ésima nova tentativa: 3 s, 6 s, 12 s… até o teto.
+fn retry_delay(failures: u32) -> Duration {
+    let doublings = failures.saturating_sub(1).min(6);
+    PREFETCH_RETRY_BASE
+        .saturating_mul(1u32 << doublings)
+        .min(PREFETCH_RETRY_MAX)
+}
+
+fn bump(epoch: &watch::Sender<u64>) {
+    epoch.send_modify(|value| *value = value.wrapping_add(1));
+}
+
+/// Desfecho de uma resolução com prazo.
+enum Resolution {
+    Done(ytcl_core::error::Result<ResolvedStream>),
+    /// O prazo estourou; o resolvedor foi abandonado (e o subprocesso morto).
+    TimedOut,
+    /// Uma invalidação tornou o pedido inútil antes da resposta.
+    Cancelled,
+}
 
 struct Inner {
     queue: Queue,
@@ -40,6 +92,8 @@ struct Inner {
     queue_revision: u64,
     loading: bool,
     prefetching: Option<(u64, u64)>,
+    /// Segura a próxima tentativa de pré-resolver a faixa que acabou de falhar.
+    prefetch_retry: Option<PrefetchRetry>,
     last_pos: f64,
     last_duration: f64,
 }
@@ -57,6 +111,13 @@ pub struct Player {
     to_ui: mpsc::UnboundedSender<PlayerEvent>,
     /// Serializa mudanças da fila com comandos do backend, nunca com a rede.
     operations: AsyncMutex<()>,
+    /// Sobe a cada invalidação da seleção atual. As resoluções em voo
+    /// observam este contador e desistem, em vez de só terem o resultado
+    /// descartado no fim.
+    invalidations: watch::Sender<u64>,
+    /// Sobe a cada alteração de ordem da fila. Cancela só a pré-resolução:
+    /// enfileirar uma faixa não pode derrubar o carregamento da que toca.
+    queue_changes: watch::Sender<u64>,
 }
 
 impl Player {
@@ -81,11 +142,14 @@ impl Player {
                 queue_revision: 0,
                 loading: false,
                 prefetching: None,
+                prefetch_retry: None,
                 last_pos: 0.0,
                 last_duration: 0.0,
             })),
             to_ui,
             operations: AsyncMutex::new(()),
+            invalidations: watch::Sender::new(0),
+            queue_changes: watch::Sender::new(0),
         });
 
         let p = player.clone();
@@ -107,6 +171,18 @@ impl Player {
     /// Toca uma lista de faixas a partir de `start`.
     pub async fn play_tracks(&self, tracks: Vec<Track>, start: usize) -> anyhow::Result<()> {
         self.change_current(|queue| queue.set(tracks, start)).await
+    }
+
+    /// "Aleatório" das telas de álbum/playlist: sorteia `start` para abrir e
+    /// embaralha o resto atrás dela.
+    ///
+    /// Uma operação só de propósito. Ligar o aleatório e trocar a fila em
+    /// duas chamadas deixa um intervalo em que a fila nova está com a
+    /// ordenação antiga (ou o contrário), e quem clica duas vezes rápido vê
+    /// o resultado de metade de cada uma.
+    pub async fn play_shuffled(&self, tracks: Vec<Track>, start: usize) -> anyhow::Result<()> {
+        self.change_current(|queue| queue.set_shuffled(tracks, start))
+            .await
     }
 
     pub async fn toggle_pause(&self) -> anyhow::Result<()> {
@@ -202,6 +278,7 @@ impl Player {
             inner.prefetching = None;
             edit(&mut inner.queue);
         }
+        self.cancel_prefetch_in_flight();
         self.emit(PlayerEvent::QueueChanged);
         Ok(())
     }
@@ -253,13 +330,104 @@ impl Player {
 
     /// Chamado com `operations` adquirido. Invalida também a pré-carga.
     fn invalidate_current(&self) {
+        {
+            let mut inner = self.inner.lock();
+            inner.generation = inner.generation.wrapping_add(1);
+            inner.queue_revision = inner.queue_revision.wrapping_add(1);
+            inner.prefetched = None;
+            inner.prefetching = None;
+            inner.current_stream = None;
+            inner.loading = false;
+        }
+        self.cancel_in_flight();
+    }
+
+    /// Avisa as resoluções em voo — da faixa atual e da próxima — de que
+    /// ninguém mais quer o resultado. Elas devolvem `Resolution::Cancelled`
+    /// e soltam o subprocesso.
+    fn cancel_in_flight(&self) {
+        bump(&self.invalidations);
+        // Trocar a seleção também descarta a pré-carga que ia com ela.
+        bump(&self.queue_changes);
+    }
+
+    /// Cancela só a pré-resolução. A faixa que já está carregando continua:
+    /// enfileirar ou reordenar não deve interromper o que o usuário mandou
+    /// tocar.
+    fn cancel_prefetch_in_flight(&self) {
+        bump(&self.queue_changes);
+    }
+
+    /// Resolve com prazo, desistindo assim que `cancelled` completa.
+    ///
+    /// Largar o futuro do resolvedor é o que realmente cancela: o
+    /// `tokio::process::Command` do yt-dlp usa `kill_on_drop`, então o
+    /// subprocesso morre junto.
+    async fn resolve_until(
+        &self,
+        video_id: &str,
+        cancelled: impl std::future::Future<Output = ()>,
+    ) -> Resolution {
+        tokio::select! {
+            biased;
+            _ = cancelled => Resolution::Cancelled,
+            outcome = tokio::time::timeout(RESOLVE_TIMEOUT, self.resolver.resolve(video_id)) => {
+                match outcome {
+                    Ok(result) => Resolution::Done(result),
+                    Err(_) => Resolution::TimedOut,
+                }
+            }
+        }
+    }
+
+    /// Resolução da faixa atual: só uma nova seleção a cancela.
+    ///
+    /// `subscribe` nasce marcando a versão atual como vista, então `changed()`
+    /// só dispara para invalidações posteriores a esta linha.
+    async fn resolve_with_deadline(&self, video_id: &str) -> Resolution {
+        let mut cancel = self.invalidations.subscribe();
+        self.resolve_until(video_id, async move {
+            let _ = cancel.changed().await;
+        })
+        .await
+    }
+
+    /// Pré-resolução: cancelada por uma nova seleção ou por qualquer mudança
+    /// de ordem da fila, que é o que define qual é "a próxima".
+    async fn prefetch_with_deadline(&self, video_id: &str) -> Resolution {
+        let mut cancel = self.invalidations.subscribe();
+        let mut reordered = self.queue_changes.subscribe();
+        self.resolve_until(video_id, async move {
+            tokio::select! {
+                _ = cancel.changed() => {}
+                _ = reordered.changed() => {}
+            }
+        })
+        .await
+    }
+
+    /// Afasta a próxima tentativa de pré-resolver esta faixa.
+    fn note_prefetch_failure(&self, video_id: &str) {
         let mut inner = self.inner.lock();
-        inner.generation = inner.generation.wrapping_add(1);
-        inner.queue_revision = inner.queue_revision.wrapping_add(1);
-        inner.prefetched = None;
-        inner.prefetching = None;
-        inner.current_stream = None;
-        inner.loading = false;
+        let failures = match &inner.prefetch_retry {
+            Some(retry) if retry.video_id == video_id => retry.failures.saturating_add(1),
+            _ => 1,
+        };
+        inner.prefetch_retry = Some(PrefetchRetry {
+            video_id: video_id.to_owned(),
+            failures,
+            retry_at: Instant::now() + retry_delay(failures),
+        });
+    }
+
+    /// Desiste da faixa atual e conta o porquê na barra do player.
+    /// Chamado com `operations` adquirido e a geração já conferida.
+    fn fail_current(&self, reason: &str) {
+        self.inner.lock().loading = false;
+        self.emit(PlayerEvent::Error {
+            message: format!("não consegui tocar: {reason}"),
+        });
+        self.set_state(PlaybackState::Idle);
     }
 
     /// Prepara uma seleção enquanto `operations` protege fila e backend.
@@ -300,20 +468,25 @@ impl Player {
         let Some(request) = request else {
             return Ok(());
         };
-        let resolved = self.resolver.resolve(&request.track.id).await;
+        let outcome = self.resolve_with_deadline(&request.track.id).await;
         let _operation = self.operations.lock().await;
         if self.inner.lock().generation != request.generation {
             // Nem o sucesso nem o erro de um pedido antigo pode alterar a UI.
             return Ok(());
         }
-        let stream = match resolved {
-            Ok(stream) => stream,
-            Err(error) => {
-                self.inner.lock().loading = false;
-                self.emit(PlayerEvent::Error {
-                    message: format!("não consegui tocar: {error}"),
-                });
-                self.set_state(PlaybackState::Idle);
+        let stream = match outcome {
+            Resolution::Done(Ok(stream)) => stream,
+            // A seleção que nos cancelou já assumiu a UI.
+            Resolution::Cancelled => return Ok(()),
+            Resolution::Done(Err(error)) => {
+                self.fail_current(&error.to_string());
+                return Ok(());
+            }
+            Resolution::TimedOut => {
+                self.fail_current(&format!(
+                    "a resolução do áudio passou de {} s",
+                    RESOLVE_TIMEOUT.as_secs()
+                ));
                 return Ok(());
             }
         };
@@ -410,11 +583,20 @@ impl Player {
                 }
                 _ => return,
             };
+            // Faixa que acabou de falhar espera sua vez: sem isso cada evento
+            // de posição dispararia um yt-dlp novo para a mesma negativa.
+            let waiting = inner
+                .prefetch_retry
+                .as_ref()
+                .is_some_and(|retry| retry.video_id == next && Instant::now() < retry.retry_at);
+            if waiting {
+                return;
+            }
             inner.prefetching = Some((inner.generation, inner.queue_revision));
             (inner.generation, inner.queue_revision, next)
         };
 
-        let resolved = self.resolver.resolve(&next).await;
+        let outcome = self.prefetch_with_deadline(&next).await;
         let _operation = self.operations.lock().await;
         {
             let mut inner = self.inner.lock();
@@ -430,20 +612,38 @@ impl Player {
                 return;
             }
         }
-        match resolved {
-            Ok(stream) => {
-                // Só existe uma próxima faixa no mpv, assim como em prefetched.
-                let result = async {
-                    self.backend.clear_next().await?;
-                    self.backend.append(&stream, self.gain_for(&stream)).await
-                }
-                .await;
-                match result {
-                    Ok(()) => self.inner.lock().prefetched = Some((next, stream)),
-                    Err(error) => tracing::debug!("pré-carga falhou: {error}"),
-                }
+        let stream = match outcome {
+            Resolution::Done(Ok(stream)) => stream,
+            // Cancelamento não é culpa da faixa: quem invalidou refaz a
+            // pré-carga, e a próxima tentativa não deve ficar esperando.
+            Resolution::Cancelled => return,
+            Resolution::Done(Err(error)) => {
+                tracing::debug!("pré-resolução da próxima falhou: {error}");
+                self.note_prefetch_failure(&next);
+                return;
             }
-            Err(error) => tracing::debug!("pré-resolução da próxima falhou: {error}"),
+            Resolution::TimedOut => {
+                tracing::warn!("pré-resolução de {next} passou do prazo; abandonada");
+                self.note_prefetch_failure(&next);
+                return;
+            }
+        };
+        // Só existe uma próxima faixa no mpv, assim como em prefetched.
+        let result = async {
+            self.backend.clear_next().await?;
+            self.backend.append(&stream, self.gain_for(&stream)).await
+        }
+        .await;
+        match result {
+            Ok(()) => {
+                let mut inner = self.inner.lock();
+                inner.prefetch_retry = None;
+                inner.prefetched = Some((next, stream));
+            }
+            Err(error) => {
+                tracing::debug!("pré-carga falhou: {error}");
+                self.note_prefetch_failure(&next);
+            }
         }
     }
 
@@ -479,6 +679,9 @@ impl Player {
                         inner.last_pos = 0.0;
                         inner.last_duration = 0.0;
                     }
+                    // A faixa emendou: qualquer resolução em voo era para a
+                    // fila anterior a esta transição.
+                    self.cancel_in_flight();
                     self.emit(PlayerEvent::TrackChanged {
                         track: Box::new(track),
                     });

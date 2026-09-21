@@ -58,6 +58,29 @@ impl Queue {
         }
     }
 
+    /// Substitui a fila tocando `start` primeiro e todo o resto embaralhado
+    /// atrás dela, com o modo aleatório ligado.
+    ///
+    /// É o "Aleatório" das telas de álbum/playlist. Sortear o ponto de
+    /// partida com `set` colocava tudo o que vinha antes no histórico: com
+    /// repeat desligado, sortear a última faixa fazia tocar só ela. Aqui
+    /// nada vira histórico — a fila inteira toca, em outra ordem.
+    pub fn set_shuffled(&mut self, tracks: Vec<Track>, start: usize) {
+        let n = tracks.len();
+        self.tracks = tracks;
+        self.shuffled = true;
+        self.pos = 0;
+        if n == 0 {
+            self.order = Vec::new();
+            return;
+        }
+        let first = start.min(n - 1);
+        self.order = std::iter::once(first)
+            .chain((0..n).filter(|&i| i != first))
+            .collect();
+        self.reshuffle_ahead();
+    }
+
     pub fn is_empty(&self) -> bool {
         self.tracks.is_empty()
     }
@@ -308,6 +331,59 @@ mod tests {
         q.set(tracks(&["a"]), 0);
         q.enqueue(tracks(&["z"]).pop().unwrap());
         assert_eq!(ids(&q), vec!["a", "z"]);
+    }
+
+    #[test]
+    fn aleatorio_mantem_o_album_inteiro_a_frente() {
+        let originais = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+        // O índice sorteado pode ser qualquer um, inclusive o último — foi
+        // esse o caso que fazia tocar uma faixa só.
+        for start in 0..originais.len() {
+            let mut q = Queue::default();
+            q.set_shuffled(tracks(&originais), start);
+
+            assert!(q.shuffled());
+            assert_eq!(
+                q.current().unwrap().id,
+                originais[start],
+                "a faixa sorteada tem que ser a primeira a tocar"
+            );
+            assert!(q.view()[0].1, "nada pode virar histórico");
+
+            let mut tocadas = vec![q.current().unwrap().id.clone()];
+            while let Some(track) = q.advance() {
+                tocadas.push(track.id.clone());
+            }
+            let mut ordenadas = tocadas.clone();
+            ordenadas.sort();
+            let mut esperadas: Vec<String> = originais.iter().map(|s| s.to_string()).collect();
+            esperadas.sort();
+            assert_eq!(
+                ordenadas, esperadas,
+                "com repeat off, o álbum inteiro tem que tocar uma vez cada"
+            );
+        }
+    }
+
+    #[test]
+    fn aleatorio_e_deterministico_e_nao_deixa_a_ordem_original() {
+        let originais = ["1", "2", "3", "4", "5", "6", "7", "8"];
+        let mut a = Queue::default();
+        a.set_shuffled(tracks(&originais), 0);
+        let mut b = Queue::default();
+        b.set_shuffled(tracks(&originais), 0);
+        assert_eq!(ids(&a), ids(&b), "mesma fila + semente => mesma ordem");
+        let na_ordem: Vec<String> = originais.iter().map(|s| s.to_string()).collect();
+        assert_ne!(ids(&a), na_ordem, "não embaralhou nada");
+    }
+
+    #[test]
+    fn aleatorio_com_fila_vazia_nao_estoura() {
+        let mut q = Queue::default();
+        q.set_shuffled(vec![], 3);
+        assert!(q.current().is_none());
+        assert!(q.advance().is_none());
+        assert!(q.view().is_empty());
     }
 
     #[test]

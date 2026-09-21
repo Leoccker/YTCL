@@ -57,6 +57,20 @@ struct ResolveCall {
     reply: oneshot::Sender<Result<ResolvedStream>>,
 }
 
+impl ResolveCall {
+    /// Responde à resolução, tolerando que ela já tenha sido cancelada —
+    /// é justamente o que vários testes provocam de propósito.
+    fn answer(self, result: Result<ResolvedStream>) {
+        let _ = self.reply.send(result);
+    }
+
+    /// O player largou o futuro da resolução (com yt-dlp de verdade, o
+    /// subprocesso teria morrido junto).
+    fn abandoned(&self) -> bool {
+        self.reply.is_closed()
+    }
+}
+
 struct ControlledResolver(mpsc::UnboundedSender<ResolveCall>);
 
 #[async_trait]
@@ -151,17 +165,13 @@ impl Rig {
 
     async fn start(&mut self, ids: &[&str]) {
         let task = self.play(ids);
-        self.call(ids[0])
-            .await
-            .reply
-            .send(Ok(stream(ids[0])))
-            .unwrap();
+        self.call(ids[0]).await.answer(Ok(stream(ids[0])));
         task.await.unwrap().unwrap();
     }
 
     async fn append(&mut self, id: &str) {
         let task = self.prefetch();
-        self.call(id).await.reply.send(Ok(stream(id))).unwrap();
+        self.call(id).await.answer(Ok(stream(id)));
         task.await.unwrap();
     }
 }
@@ -172,7 +182,7 @@ async fn ultima_selecao_vence_mesmo_se_a_anterior_termina_depois() {
     let first = rig.play(&["A"]);
     let a = rig.call("A").await;
     rig.start(&["B"]).await;
-    a.reply.send(Ok(stream("A"))).unwrap();
+    a.answer(Ok(stream("A")));
     first.await.unwrap().unwrap();
     assert_eq!(*rig.backend.loaded.lock(), ["B"]);
     assert_eq!(rig.player.snapshot().current.unwrap().id, "B");
@@ -186,7 +196,7 @@ async fn erro_antigo_nao_muda_estado_nem_emite_erro_na_selecao_nova() {
     rig.start(&["B"]).await;
     rig.player.set_state(PlaybackState::Playing);
     while rig.events.try_recv().is_ok() {}
-    a.reply.send(Err(CoreError::NotFound)).unwrap();
+    a.answer(Err(CoreError::NotFound));
     first.await.unwrap().unwrap();
     assert_eq!(rig.player.snapshot().state, PlaybackState::Playing);
     assert!(rig.events.try_recv().is_err());
@@ -198,13 +208,9 @@ async fn selecionar_o_mesmo_id_tambem_invalida_o_pedido_anterior() {
     let first = rig.play(&["A"]);
     let old = rig.call("A").await;
     let second = rig.play(&["A"]);
-    rig.call("A")
-        .await
-        .reply
-        .send(Ok(stream("URL-nova")))
-        .unwrap();
+    rig.call("A").await.answer(Ok(stream("URL-nova")));
     second.await.unwrap().unwrap();
-    old.reply.send(Ok(stream("URL-antiga"))).unwrap();
+    old.answer(Ok(stream("URL-antiga")));
     first.await.unwrap().unwrap();
     assert_eq!(*rig.backend.loaded.lock(), ["URL-nova"]);
 }
@@ -215,7 +221,7 @@ async fn proxima_no_fim_cancela_carregamento_pendente() {
     let task = rig.play(&["A"]);
     let old = rig.call("A").await;
     rig.player.next().await.unwrap();
-    old.reply.send(Ok(stream("A"))).unwrap();
+    old.answer(Ok(stream("A")));
     task.await.unwrap().unwrap();
     assert!(rig.backend.loaded.lock().is_empty());
     assert_eq!(rig.player.snapshot().state, PlaybackState::Idle);
@@ -244,7 +250,7 @@ async fn mudar_fila_descarta_pre_resolucao_ainda_em_voo() {
     let task = rig.prefetch();
     let b = rig.call("B").await;
     rig.player.play_next(track("C")).await.unwrap();
-    b.reply.send(Ok(stream("B"))).unwrap();
+    b.answer(Ok(stream("B")));
     task.await.unwrap();
     assert_eq!(*rig.backend.playlist.lock(), ["A"]);
     rig.append("C").await;
@@ -258,7 +264,7 @@ async fn trocar_faixa_descarta_pre_resolucao_da_fila_antiga() {
     let task = rig.prefetch();
     let b = rig.call("B").await;
     rig.start(&["D", "E"]).await;
-    b.reply.send(Ok(stream("B"))).unwrap();
+    b.answer(Ok(stream("B")));
     task.await.unwrap();
     assert_eq!(*rig.backend.playlist.lock(), ["D"]);
 }
@@ -271,7 +277,7 @@ async fn posicoes_repetidas_nao_duplicam_a_pre_resolucao_pendente() {
     let pending = rig.call("B").await;
     rig.prefetch().await.unwrap();
     assert!(rig.calls.try_recv().is_err());
-    pending.reply.send(Ok(stream("B"))).unwrap();
+    pending.answer(Ok(stream("B")));
     task.await.unwrap();
     assert_eq!(*rig.backend.playlist.lock(), ["A", "B"]);
 }
@@ -318,11 +324,7 @@ async fn recuperacao_invalida_pre_carga_e_permite_refaze_la() {
     let player = rig.player.clone();
     let generation = player.inner.lock().generation;
     let recovery = tokio::spawn(async move { player.recover_from_error(generation, "403").await });
-    rig.call("A")
-        .await
-        .reply
-        .send(Ok(stream("A-renovada")))
-        .unwrap();
+    rig.call("A").await.answer(Ok(stream("A-renovada")));
     recovery.await.unwrap();
     assert_eq!(*rig.backend.playlist.lock(), ["A-renovada"]);
     assert_eq!(*rig.backend.seeks.lock(), [150.0]);
@@ -340,7 +342,7 @@ async fn recuperacao_atrasada_nao_sobrescreve_nova_selecao() {
     let recovery = tokio::spawn(async move { player.recover_from_error(generation, "403").await });
     let old = rig.call("A").await;
     rig.start(&["C"]).await;
-    old.reply.send(Ok(stream("A-renovada"))).unwrap();
+    old.answer(Ok(stream("A-renovada")));
     recovery.await.unwrap();
     assert_eq!(*rig.backend.loaded.lock(), ["A", "C"]);
     assert!(rig.backend.seeks.lock().is_empty());
@@ -385,5 +387,139 @@ async fn pausa_e_processada_enquanto_pre_resolucao_esta_pendente() {
     })
     .await
     .expect("pausa ficou bloqueada pela rede");
-    pending.reply.send(Ok(stream("B"))).unwrap();
+    pending.answer(Ok(stream("B")));
+}
+
+// --- prazo, cancelamento e espera entre tentativas (item 3) --------------
+
+#[tokio::test]
+async fn mudanca_de_fila_abandona_a_pre_resolucao_em_voo() {
+    let mut rig = Rig::new();
+    rig.start(&["A", "B"]).await;
+    let task = rig.prefetch();
+    let pendente = rig.call("B").await;
+    rig.player.play_next(track("C")).await.unwrap();
+    task.await.unwrap();
+    assert!(
+        pendente.abandoned(),
+        "a resolução de B continuou rodando depois da fila mudar"
+    );
+}
+
+#[tokio::test]
+async fn nova_selecao_abandona_a_resolucao_da_anterior() {
+    let mut rig = Rig::new();
+    let primeira = rig.play(&["A"]);
+    let pendente = rig.call("A").await;
+    rig.start(&["B"]).await;
+    primeira.await.unwrap().unwrap();
+    assert!(
+        pendente.abandoned(),
+        "a resolução de A continuou rodando depois de trocar para B"
+    );
+}
+
+#[tokio::test]
+async fn enfileirar_nao_derruba_a_faixa_que_esta_carregando() {
+    let mut rig = Rig::new();
+    let task = rig.play(&["A"]);
+    let pendente = rig.call("A").await;
+    // Mexer na fila cancela a pré-resolução, nunca o que o usuário mandou
+    // tocar e ainda está resolvendo.
+    rig.player.enqueue(track("B")).await.unwrap();
+    assert!(
+        !pendente.abandoned(),
+        "enfileirar cancelou o carregamento da faixa atual"
+    );
+    pendente.answer(Ok(stream("A")));
+    task.await.unwrap().unwrap();
+    assert_eq!(*rig.backend.loaded.lock(), ["A"]);
+    assert_eq!(rig.player.snapshot().current.unwrap().id, "A");
+    assert_eq!(rig.player.snapshot().queue.len(), 2);
+}
+
+#[tokio::test(start_paused = true)]
+async fn pre_resolucao_pendurada_e_abandonada_no_prazo() {
+    let mut rig = Rig::new();
+    rig.start(&["A", "B"]).await;
+    let task = rig.prefetch();
+    let pendurada = rig.call("B").await;
+    // Ninguém responde: só o prazo encerra a tentativa.
+    task.await.unwrap();
+    assert!(pendurada.abandoned(), "o prazo não encerrou a resolução");
+    assert_eq!(*rig.backend.playlist.lock(), ["A"]);
+    assert!(rig.player.inner.lock().prefetching.is_none());
+}
+
+#[tokio::test(start_paused = true)]
+async fn resolucao_pendurada_da_faixa_atual_avisa_o_usuario() {
+    let mut rig = Rig::new();
+    let task = rig.play(&["A"]);
+    let pendurada = rig.call("A").await;
+    task.await.unwrap().unwrap();
+    assert!(pendurada.abandoned(), "o prazo não encerrou a resolução");
+    assert_eq!(rig.player.snapshot().state, PlaybackState::Idle);
+    assert!(!rig.player.inner.lock().loading);
+    let erro = std::iter::from_fn(|| rig.events.try_recv().ok())
+        .any(|event| matches!(event, PlayerEvent::Error { .. }));
+    assert!(erro, "o usuário ficou sem explicação para a faixa parada");
+}
+
+#[tokio::test(start_paused = true)]
+async fn falha_na_pre_resolucao_espera_antes_de_tentar_de_novo() {
+    let mut rig = Rig::new();
+    rig.start(&["A", "B"]).await;
+
+    let task = rig.prefetch();
+    rig.call("B").await.answer(Err(CoreError::NotFound));
+    task.await.unwrap();
+
+    // As posições seguintes (~4 Hz) não podem gerar um yt-dlp cada.
+    for _ in 0..3 {
+        rig.prefetch().await.unwrap();
+    }
+    assert!(
+        rig.calls.try_recv().is_err(),
+        "tentou de novo sem esperar o intervalo"
+    );
+
+    tokio::time::advance(PREFETCH_RETRY_BASE).await;
+    rig.append("B").await;
+    assert_eq!(*rig.backend.playlist.lock(), ["A", "B"]);
+    assert!(
+        rig.player.inner.lock().prefetch_retry.is_none(),
+        "o sucesso deveria zerar a espera"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_espera_cresce_a_cada_falha_da_mesma_faixa() {
+    let mut rig = Rig::new();
+    rig.start(&["A", "B"]).await;
+
+    for esperado in [PREFETCH_RETRY_BASE, PREFETCH_RETRY_BASE * 2] {
+        let task = rig.prefetch();
+        rig.call("B").await.answer(Err(CoreError::NotFound));
+        task.await.unwrap();
+
+        // Um instante antes do prazo ainda não tenta...
+        tokio::time::advance(esperado - std::time::Duration::from_millis(1)).await;
+        rig.prefetch().await.unwrap();
+        assert!(rig.calls.try_recv().is_err(), "tentou cedo demais");
+        // ...e logo depois, sim.
+        tokio::time::advance(std::time::Duration::from_millis(1)).await;
+    }
+
+    rig.append("B").await;
+    assert_eq!(*rig.backend.playlist.lock(), ["A", "B"]);
+}
+
+#[test]
+fn a_espera_dobra_ate_o_teto() {
+    assert_eq!(retry_delay(1), PREFETCH_RETRY_BASE);
+    assert_eq!(retry_delay(2), PREFETCH_RETRY_BASE * 2);
+    assert_eq!(retry_delay(3), PREFETCH_RETRY_BASE * 4);
+    assert_eq!(retry_delay(50), PREFETCH_RETRY_MAX);
+    // `failures` nunca é zero, mas a conta não pode estourar se for.
+    assert_eq!(retry_delay(0), PREFETCH_RETRY_BASE);
 }

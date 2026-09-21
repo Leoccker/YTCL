@@ -35,6 +35,16 @@ pub async fn player_play_tracks(state: St<'_>, tracks: Vec<Track>, start: usize)
         .map_err(|e| CoreError::Other(e.to_string()).into())
 }
 
+/// "Aleatório": troca a fila e liga o modo embaralhado de uma vez só.
+#[tauri::command]
+pub async fn player_play_shuffled(state: St<'_>, tracks: Vec<Track>, start: usize) -> R<()> {
+    remember_tracks(&state, &tracks);
+    player(&state)?
+        .play_shuffled(tracks, start)
+        .await
+        .map_err(wrap)
+}
+
 #[tauri::command]
 pub async fn player_toggle(state: St<'_>) -> R<()> {
     player(&state)?.toggle_pause().await.map_err(wrap)

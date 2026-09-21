@@ -10,6 +10,7 @@ import {
   playerSnapshot,
   playerAvailable,
   playTracks,
+  playShuffled as playerPlayShuffled,
   playerToggle,
   playerNext,
   playerPrev,
@@ -153,18 +154,24 @@ class PlayerState {
     this.guard(playTracks(tracks, start));
   }
   /**
-   * "Aleatório" das telas de detalhe. A fila do backend só embaralha o que
-   * vem depois da faixa atual, então começar sempre da primeira deixaria a
-   * faixa 1 fixa em todo aleatório — sorteamos o ponto de partida.
+   * "Aleatório" das telas de detalhe. Sorteamos qual faixa abre; o backend
+   * põe ela na frente e embaralha todas as outras atrás — nada vira
+   * histórico, então o álbum inteiro toca mesmo com repeat desligado.
+   *
+   * Um comando só: ligar o aleatório e trocar a fila em duas chamadas
+   * deixava uma janela com a fila nova ainda na ordem antiga.
    */
   playShuffled(tracks: Track[]) {
     if (tracks.length === 0) return;
-    // O comando de shuffle agora aguarda a limpeza da pré-carga no mpv.
-    // A nova fila só pode começar depois que essa alteração for aplicada.
-    this.guard(playerSetShuffle(true).then(() => {
-      this.shuffled = true;
-      this.play(tracks, Math.floor(Math.random() * tracks.length));
-    }));
+    const start = Math.floor(Math.random() * tracks.length);
+    // Mesma proteção contra clique repetido do `play`.
+    const id = tracks[start]?.id ?? null;
+    const now = performance.now();
+    if (now - this.#lastPlayAt < 700) return;
+    this.#lastPlayAt = now;
+    this.#lastPlayId = id;
+    this.shuffled = true;
+    this.guard(playerPlayShuffled(tracks, start));
   }
 
   toggle() {
